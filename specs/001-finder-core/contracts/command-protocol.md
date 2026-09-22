@@ -29,6 +29,8 @@
 
 `conflictPolicy` 只允许 ask、skip、keepBoth。配置编辑、取消、冲突选择和恢复由宿主 UI 直接调用内部服务，V1 不开放为外部唤醒命令。UUID 型文件引用 ID 只用于关联，不授予访问权。
 
+施工澄清（2026-09-22）：createFile、pasteMove、transfer 的 destination 字段仍必须存在，但允许显式 null，表示由宿主展示目录选择器；取消选择不产生文件变更。这样能够实现 FR-007 的“选择目录”和跨目录多选交互，不使用伪造路径。非空 destination 的 kindHint 为 unknown 时，宿主根据实际选中对象解析目录，不能仅用 URL 尾部斜杠判断。
+
 ## 2. 运输机制和信任边界
 
 发布路径：共享容器 `Inbox/<requestID>.tmp` 写完并关闭，再在同目录无覆盖提交为 `<requestID>.json`。不同扩展实例使用不同 producerInstanceID。请求入队后显式唤醒已知宿主，传递 `rightmouse://dispatch/<requestID>`；宿主校验 scheme/host/path 且拒绝 query/fragment，不从 URL 接收 action 或文件路径。

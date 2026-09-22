@@ -250,15 +250,17 @@
     {
       "id": "T001",
       "dependsOn": [],
-      "status": "pending",
-      "evidence": []
+      "status": "completed",
+      "evidence": [
+        "evidence/EV-T001-environment.md"
+      ]
     },
     {
       "id": "T002",
       "dependsOn": [
         "T001"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -266,7 +268,7 @@
       "dependsOn": [
         "T002"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -274,7 +276,7 @@
       "dependsOn": [
         "T002"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -283,7 +285,7 @@
         "T003",
         "T004"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -293,7 +295,7 @@
         "T004",
         "T005"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -301,7 +303,7 @@
       "dependsOn": [
         "T006"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -309,7 +311,7 @@
       "dependsOn": [
         "T007"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -318,7 +320,7 @@
         "T004",
         "T007"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -328,7 +330,7 @@
         "T007",
         "T009"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -337,7 +339,7 @@
         "T007",
         "T010"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -348,7 +350,7 @@
         "T010",
         "T011"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -357,7 +359,7 @@
         "T008",
         "T010"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -366,7 +368,7 @@
         "T009",
         "T010"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -376,7 +378,7 @@
         "T013",
         "T014"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -385,7 +387,7 @@
         "T009",
         "T010"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -396,7 +398,7 @@
         "T014",
         "T016"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -406,7 +408,7 @@
         "T010",
         "T017"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": []
     },
     {
@@ -416,7 +418,7 @@
         "T015",
         "T017"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": []
     },
     {
