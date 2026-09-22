@@ -98,6 +98,12 @@ def check_traceability() -> tuple[int, int, int]:
     for cid, row in cases.items():
         if row["status"] == "PASS":
             require(bool(row["evidence"]), f"{cid}: PASS without evidence")
+        if row["status"] == "NOT_RUN" and row["evidence"]:
+            require(bool(row.get("remaining", "").strip()), f"{cid}: partial evidence without remaining scope")
+    for row in [*tasks.values(), *cases.values()]:
+        for evidence in row["evidence"]:
+            path = (FEATURE / evidence).resolve()
+            require(path.is_relative_to(ROOT) and path.is_file(), f"{row['id']}: invalid evidence path {evidence}")
     visiting: set[str] = set()
     visited: set[str] = set()
 

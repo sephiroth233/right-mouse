@@ -261,7 +261,11 @@
         "T001"
       ],
       "status": "in_progress",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-native-build-001.md",
+        "../../Config/validation/finder-load-2026-09-22.md",
+        "evidence/EV-source-isolation-001.md"
+      ]
     },
     {
       "id": "T003",
@@ -269,7 +273,12 @@
         "T002"
       ],
       "status": "in_progress",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "../../Config/validation/finder-load-2026-09-22.md",
+        "evidence/EV-real-volume-001.md",
+        "evidence/EV-source-isolation-001.md"
+      ]
     },
     {
       "id": "T004",
@@ -277,7 +286,11 @@
         "T002"
       ],
       "status": "in_progress",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-private-storage-recovery-001.md",
+        "../../Config/validation/finder-load-2026-09-22.md",
+        "evidence/EV-workflows-001.md"
+      ]
     },
     {
       "id": "T005",
@@ -286,7 +299,13 @@
         "T004"
       ],
       "status": "in_progress",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-native-build-001.md",
+        "evidence/EV-followup-hardening-001.md",
+        "evidence/EV-workflows-001.md",
+        "evidence/EV-private-storage-recovery-001.md"
+      ]
     },
     {
       "id": "T006",
@@ -296,7 +315,10 @@
         "T005"
       ],
       "status": "in_progress",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-real-volume-001.md",
+        "evidence/EV-source-isolation-001.md"
+      ]
     },
     {
       "id": "T007",
@@ -304,7 +326,12 @@
         "T006"
       ],
       "status": "in_progress",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-workflows-001.md",
+        "evidence/EV-private-storage-recovery-001.md",
+        "../../docs/sdd/evidence/menu-policy-benchmark/2026-09-23-menu-snapshot-recent/README.md"
+      ]
     },
     {
       "id": "T008",
@@ -312,7 +339,13 @@
         "T007"
       ],
       "status": "in_progress",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "../../Config/validation/finder-load-2026-09-22.md",
+        "evidence/EV-workflows-001.md",
+        "evidence/EV-private-storage-recovery-001.md",
+        "../../docs/sdd/evidence/menu-policy-benchmark/2026-09-23-menu-snapshot-recent/README.md"
+      ]
     },
     {
       "id": "T009",
@@ -321,7 +354,12 @@
         "T007"
       ],
       "status": "in_progress",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-private-storage-recovery-001.md",
+        "../../Config/validation/finder-load-2026-09-22.md",
+        "evidence/EV-workflows-001.md",
+        "evidence/EV-core-checks-001.md"
+      ]
     },
     {
       "id": "T010",
@@ -331,7 +369,15 @@
         "T009"
       ],
       "status": "in_progress",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-native-build-001.md",
+        "evidence/EV-followup-hardening-001.md",
+        "evidence/EV-workflows-001.md",
+        "evidence/EV-private-storage-recovery-001.md",
+        "evidence/EV-diagnostics-retention-001.md",
+        "evidence/EV-source-isolation-001.md"
+      ]
     },
     {
       "id": "T011",
@@ -340,7 +386,16 @@
         "T010"
       ],
       "status": "in_progress",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-source-isolation-001.md",
+        "evidence/EV-real-volume-001.md",
+        "evidence/EV-workflows-001.md",
+        "evidence/EV-followup-hardening-001.md",
+        "evidence/EV-transfer-failure-codes-001.md",
+        "evidence/EV-private-storage-recovery-001.md",
+        "evidence/EV-native-build-001.md"
+      ]
     },
     {
       "id": "T012",
@@ -351,7 +406,12 @@
         "T011"
       ],
       "status": "in_progress",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-private-storage-recovery-001.md",
+        "evidence/EV-source-isolation-001.md",
+        "evidence/EV-workflows-001.md"
+      ]
     },
     {
       "id": "T013",
@@ -360,7 +420,12 @@
         "T010"
       ],
       "status": "in_progress",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-followup-hardening-001.md",
+        "evidence/EV-source-isolation-001.md",
+        "evidence/EV-real-volume-001.md"
+      ]
     },
     {
       "id": "T014",
@@ -369,7 +434,11 @@
         "T010"
       ],
       "status": "in_progress",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-workflows-001.md",
+        "evidence/EV-source-isolation-001.md",
+        "evidence/EV-core-checks-001.md"
+      ]
     },
     {
       "id": "T015",
@@ -379,7 +448,16 @@
         "T014"
       ],
       "status": "in_progress",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-source-isolation-001.md",
+        "evidence/EV-followup-hardening-001.md",
+        "evidence/EV-real-volume-001.md",
+        "evidence/EV-workflows-001.md",
+        "evidence/EV-transfer-failure-codes-001.md",
+        "evidence/EV-private-storage-recovery-001.md",
+        "evidence/EV-native-build-001.md"
+      ]
     },
     {
       "id": "T016",
@@ -388,7 +466,9 @@
         "T010"
       ],
       "status": "in_progress",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-open-with-host-checks-001.md"
+      ]
     },
     {
       "id": "T017",
@@ -399,7 +479,14 @@
         "T016"
       ],
       "status": "in_progress",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-workflows-001.md",
+        "evidence/EV-private-storage-recovery-001.md",
+        "../../docs/sdd/evidence/menu-policy-benchmark/2026-09-23-menu-snapshot-recent/README.md",
+        "evidence/EV-liquid-glass-001.md",
+        "evidence/EV-source-isolation-001.md"
+      ]
     },
     {
       "id": "T018",
@@ -409,7 +496,14 @@
         "T017"
       ],
       "status": "in_progress",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-private-storage-recovery-001.md",
+        "../../Config/validation/finder-load-2026-09-22.md",
+        "evidence/EV-workflows-001.md",
+        "evidence/EV-diagnostics-retention-001.md",
+        "evidence/EV-source-isolation-001.md",
+        "evidence/EV-liquid-glass-001.md"
+      ]
     },
     {
       "id": "T019",
@@ -419,7 +513,17 @@
         "T017"
       ],
       "status": "in_progress",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-source-isolation-001.md",
+        "evidence/EV-real-volume-001.md",
+        "evidence/EV-workflows-001.md",
+        "evidence/EV-followup-hardening-001.md",
+        "evidence/EV-transfer-failure-codes-001.md",
+        "evidence/EV-private-storage-recovery-001.md",
+        "evidence/EV-native-build-001.md",
+        "evidence/EV-liquid-glass-001.md"
+      ]
     },
     {
       "id": "T020",
@@ -432,8 +536,20 @@
         "T018",
         "T019"
       ],
-      "status": "pending",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "../../Config/validation/finder-load-2026-09-22.md",
+        "evidence/EV-private-storage-recovery-001.md",
+        "evidence/EV-source-isolation-001.md",
+        "evidence/EV-workflows-001.md",
+        "evidence/EV-followup-hardening-001.md",
+        "evidence/EV-real-volume-001.md",
+        "evidence/EV-open-with-host-checks-001.md",
+        "../../docs/sdd/evidence/menu-policy-benchmark/2026-09-23-menu-snapshot-recent/README.md",
+        "evidence/EV-transfer-failure-codes-001.md",
+        "evidence/EV-native-build-001.md"
+      ]
     },
     {
       "id": "T021",
@@ -443,8 +559,15 @@
         "T019",
         "T020"
       ],
-      "status": "pending",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": [
+        "../../docs/sdd/evidence/menu-policy-benchmark/2026-09-23-menu-snapshot-recent/README.md",
+        "evidence/EV-diagnostics-retention-001.md",
+        "evidence/EV-private-storage-recovery-001.md",
+        "evidence/EV-source-isolation-001.md",
+        "evidence/EV-liquid-glass-001.md",
+        "evidence/EV-real-volume-001.md"
+      ]
     },
     {
       "id": "T022",
@@ -452,7 +575,11 @@
         "T021"
       ],
       "status": "pending",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-native-build-001.md",
+        "../../Config/validation/finder-load-2026-09-22.md",
+        "evidence/EV-source-isolation-001.md"
+      ]
     },
     {
       "id": "T023",
@@ -460,164 +587,297 @@
         "T022"
       ],
       "status": "pending",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-native-build-001.md",
+        "../../Config/validation/finder-load-2026-09-22.md",
+        "evidence/EV-source-isolation-001.md"
+      ]
     }
   ],
   "cases": [
     {
       "id": "AC-001",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "../../Config/validation/finder-load-2026-09-22.md"
+      ],
+      "remaining": "菜单规则已有夹具；真实 Finder 四类上下文及完整投递链路未验收。"
     },
     {
       "id": "AC-002",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "../../Config/validation/finder-load-2026-09-22.md"
+      ],
+      "remaining": "两窗口切换、搜索结果、跨目录多选与无目标选择器均未取得真机证据。"
     },
     {
       "id": "AC-003",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-private-storage-recovery-001.md"
+      ],
+      "remaining": "六模板字节及首次 TXT 演练已有证据；真实 Finder 定位和相应应用读取未验收。"
     },
     {
       "id": "AC-004",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-source-isolation-001.md"
+      ],
+      "remaining": "12 个并发创建者与提交竞争已有证据；尚未按整条用例汇总原文件摘要、唯一命名和零孤立暂存的联合结果。"
     },
     {
       "id": "AC-005",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-workflows-001.md"
+      ],
+      "remaining": "模板合法/非法来源及持久化已有部分夹具；导入复制失败后重启、改名排序删除的完整 UI 流程未验收。"
     },
     {
       "id": "AC-006",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md"
+      ],
+      "remaining": "dotfile、stem、shell quoting 有夹具；四格式完整特殊字符矩阵、实际剪贴板与单参数执行验证未闭合。"
     },
     {
       "id": "AC-007",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md"
+      ],
+      "remaining": "过期剪切菜单规则有夹具；真实剪贴板被其他应用改写、替换剪切与重启失效流程未验收。"
     },
     {
       "id": "AC-008",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-followup-hardening-001.md",
+        "evidence/EV-source-isolation-001.md"
+      ],
+      "remaining": "同卷移动及条件撤销已测；Finder 粘贴入口和成功项移出实际剪切列表未验收。"
     },
     {
       "id": "AC-009",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-real-volume-001.md",
+        "evidence/EV-source-isolation-001.md"
+      ],
+      "remaining": "真实 APFS 双卷文件及 mode/xattr 已测；完整目录/资源元数据及不能保留时的真卷分支未全部覆盖。"
     },
     {
       "id": "AC-010",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-workflows-001.md",
+        "evidence/EV-source-isolation-001.md"
+      ],
+      "remaining": "本批冲突策略、等待持久化与提交竞争已测；实际询问 sheet 点击、关闭、键盘与取消未验收。"
     },
     {
       "id": "AC-011",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-workflows-001.md"
+      ],
+      "remaining": "后代目标拒绝、部分非法来源与目标规划有夹具；真实目标选择器取消和跨目录多项闭环未验收。"
     },
     {
       "id": "AC-012",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-workflows-001.md"
+      ],
+      "remaining": "配置容量与最近目标身份/持久化有夹具；收藏改名重定位、离线、排序删除及真实打开未完整验收。"
     },
     {
       "id": "AC-013",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-open-with-host-checks-001.md"
+      ],
+      "remaining": "适配规划和宿主交付边界已测；实际 Terminal 工作目录、VS Code 项目及特殊字符行为未验收。"
     },
     {
       "id": "AC-014",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-open-with-host-checks-001.md"
+      ],
+      "remaining": "缺失/不匹配应用的注入边界已测；真实应用移动位置、自定义应用及自动化权限拒绝未验收。"
     },
     {
       "id": "AC-015",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-workflows-001.md",
+        "evidence/EV-private-storage-recovery-001.md",
+        "../../docs/sdd/evidence/menu-policy-benchmark/2026-09-23-menu-snapshot-recent/README.md"
+      ],
+      "remaining": "配置损坏/未来版本、容量及快照规则有证据；实际预览与 Finder 菜单修改、重启后一致性未验收。"
     },
     {
       "id": "AC-016",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-private-storage-recovery-001.md",
+        "../../Config/validation/finder-load-2026-09-22.md"
+      ],
+      "remaining": "演练通过真实宿主创建与匹配回执；扩展启用和目录授权拒绝/修复的系统 UI 未验收。"
     },
     {
       "id": "AC-017",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-workflows-001.md",
+        "evidence/EV-private-storage-recovery-001.md"
+      ],
+      "remaining": "书签拒绝与保存记录身份核对有夹具；系统授权撤回、改名后修复、访问范围生命周期未完整真机验收。"
     },
     {
       "id": "AC-018",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-workflows-001.md",
+        "evidence/EV-followup-hardening-001.md",
+        "evidence/EV-source-isolation-001.md"
+      ],
+      "remaining": "逐项结果、冲突等待和恢复状态有宿主夹具；实际长任务进度、全跳过文案和等待显示未完整 UI 验收。"
     },
     {
       "id": "AC-019",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-transfer-failure-codes-001.md",
+        "evidence/EV-real-volume-001.md",
+        "evidence/EV-source-isolation-001.md"
+      ],
+      "remaining": "权限错误分类、实际 ENOSPC 与失败项重试已有证据；真实卷拔出及全部阶段错误矩阵未覆盖。"
     },
     {
       "id": "AC-020",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-source-isolation-001.md"
+      ],
+      "remaining": "环/悬空链接、包目录、FIFO 拒绝和硬链接已有夹具；全部复制/移动与元数据损失组合未逐项闭合。"
     },
     {
       "id": "AC-021",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-real-volume-001.md",
+        "evidence/EV-source-isolation-001.md"
+      ],
+      "remaining": "排队、真实复制中及注入提交后取消有证据；扫描等全部阶段、真实取消按钮和多项剩余工作未完整验收。"
     },
     {
       "id": "AC-022",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-followup-hardening-001.md",
+        "evidence/EV-private-storage-recovery-001.md",
+        "evidence/EV-source-isolation-001.md"
+      ],
+      "remaining": "持久状态恢复、坏日志保全和不重放已有夹具；各持久化边界强杀实际宿主再启动尚未执行。"
     },
     {
       "id": "AC-023",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-native-build-001.md",
+        "evidence/EV-followup-hardening-001.md"
+      ],
+      "remaining": "请求去重、同 ID 冲突和宿主锁已有夹具；真实多实例扩展、宿主冷启动与崩溃后的投递链路未验收。"
     },
     {
       "id": "AC-024",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-source-isolation-001.md"
+      ],
+      "remaining": "来源/目标替换、隔离保源、撤销竞争已有定向检查；持续写入及目录变化的完整故障矩阵尚未逐项闭合。"
     },
     {
       "id": "AC-025",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md"
+      ],
+      "remaining": "字段、版本、时间、容量与 URL 拒绝已有检查；经接收器的全部畸形请求和 JSON 键序/空白变体尚无完整联合证据。"
     },
     {
       "id": "AC-026",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-workflows-001.md",
+        "evidence/EV-private-storage-recovery-001.md"
+      ],
+      "remaining": "动作白名单、路径与保存引用约束已有夹具；无队列 URL 唤醒与真实拒绝授权链路未完整验证。"
     },
     {
       "id": "AC-027",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "../../docs/sdd/evidence/menu-policy-benchmark/2026-09-23-menu-snapshot-recent/README.md"
+      ],
+      "remaining": "100 次共享快照规则基准已测；真实 Finder/NSMenu 路径、冷暖与后台 I/O 测量未执行。"
     },
     {
       "id": "AC-028",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-diagnostics-retention-001.md",
+        "evidence/EV-private-storage-recovery-001.md",
+        "evidence/EV-source-isolation-001.md"
+      ],
+      "remaining": "脱敏字段、容量/时间保留和导出数据已有检查；断网下全部核心功能及实际导出选择器未人工验收。"
     },
     {
       "id": "AC-029",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-liquid-glass-001.md",
+        "evidence/EV-source-isolation-001.md"
+      ],
+      "remaining": "Liquid Glass availability 编译及窗口几何已测；最新包截图、深浅色、键盘/VoiceOver、多屏和旧系统降级未验收。"
     },
     {
       "id": "AC-030",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-native-build-001.md",
+        "../../Config/validation/finder-load-2026-09-22.md",
+        "evidence/EV-source-isolation-001.md"
+      ],
+      "remaining": "开发包编译与 ad-hoc 签名结构已测；有效 Developer ID、公证票据、干净安装升级/卸载未执行。"
     },
     {
       "id": "AC-031",
       "status": "NOT_RUN",
-      "evidence": []
+      "evidence": [
+        "evidence/EV-real-volume-001.md",
+        "evidence/EV-source-isolation-001.md"
+      ],
+      "remaining": "当前 macOS 27 arm64 夹具与 APFS 双卷有证据；macOS 14、外置盘/exFAT、云盘等矩阵仍未测或未承诺。"
     }
   ]
 }
