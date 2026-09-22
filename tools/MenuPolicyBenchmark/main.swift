@@ -9,6 +9,10 @@ private struct BenchmarkResult: Codable {
     let templates: Int
     let favorites: Int
     let integrations: Int
+    let recentDestinations: Int
+    let recentFavoriteDuplicates: Int
+    let recentEntriesPerTransferMenu: Int
+    let snapshotSchemaVersion: Int
     let selectedItems: Int
     let distinctSelectionParents: Int
     let compactMenu: Bool
@@ -34,7 +38,7 @@ private struct BenchmarkResult: Codable {
 }
 
 private struct Fixture {
-    let configuration: AppConfiguration
+    let snapshot: MenuConfigurationSnapshot
     let context: ActionContext
     let pending: PendingMoveSnapshot
     let now: Date
@@ -50,7 +54,7 @@ private enum BenchmarkFailure: Error {
         let scenario = CommandLine.arguments.dropFirst().first ?? "100-actions-one-selection"
         let fixture = try makeFixture(scenario)
         // Validation and all fixture setup happen before the first timed policy call.
-        try fixture.configuration.validate()
+        try fixture.snapshot.validate()
         let before = ProcessInfo.processInfo.thermalState.rawValue
         var samples: [Double] = []
         var expected: Counts?
@@ -64,6 +68,8 @@ private enum BenchmarkFailure: Error {
             // do not measure merely calling an optimizer-eliminated pure function.
             let observed = counts(entries)
             guard observed.total > 0 && observed.executable > 0 else { throw BenchmarkFailure.emptyOutput }
+            let transferMenuCount = fixture.snapshot.actions.filter { ["copyTo", "moveTo"].contains($0.commandType) }.count
+            guard observed.recentMenus == transferMenuCount, observed.recentLeaves == transferMenuCount * 7 else { throw BenchmarkFailure.outputChanged }
             if let expected, expected != observed { throw BenchmarkFailure.outputChanged }
             else { expected = observed }
             checksum &+= observed.total + observed.executable + observed.titleLength
@@ -72,16 +78,20 @@ private enum BenchmarkFailure: Error {
         let p95 = nearestRank(samples, probability: 0.95)
         let result = BenchmarkResult(
             scenario: scenario,
-            measurementScope: "MenuPolicy.entries only; no Finder callback, NSMenu construction, configuration IO, IPC, or GUI latency",
+            measurementScope: "MenuPolicy.entries(snapshot:) only; excludes AppConfiguration projection, JSON decoding, Finder callback, NSMenu construction, configuration IO, IPC, and GUI latency",
             sampleCount: samples.count,
-            configuredActions: fixture.configuration.actions.count,
-            templates: fixture.configuration.templates.count,
-            favorites: fixture.configuration.favorites.count,
-            integrations: fixture.configuration.integrations.count,
+            configuredActions: fixture.snapshot.actions.count,
+            templates: fixture.snapshot.templates.count,
+            favorites: fixture.snapshot.favorites.count,
+            integrations: fixture.snapshot.integrations.count,
+            recentDestinations: fixture.snapshot.recentDestinations.count,
+            recentFavoriteDuplicates: 3,
+            recentEntriesPerTransferMenu: 7,
+            snapshotSchemaVersion: fixture.snapshot.schemaVersion,
             selectedItems: fixture.context.selection.count,
             distinctSelectionParents: fixture.distinctParents,
-            compactMenu: fixture.configuration.compactMenu,
-            groups: Set(fixture.configuration.actions.compactMap(\.groupID)).count,
+            compactMenu: fixture.snapshot.compactMenu,
+            groups: Set(fixture.snapshot.actions.compactMap(\.groupID)).count,
             topLevelEntries: output.top,
             totalTreeEntries: output.total,
             executableEntries: output.executable,
@@ -105,7 +115,7 @@ private enum BenchmarkFailure: Error {
     }
 
     @inline(never) private static func build(_ fixture: Fixture) -> [MenuEntry] {
-        MenuPolicy.entries(configuration: fixture.configuration, context: fixture.context, pendingMove: fixture.pending, now: fixture.now)
+        MenuPolicy.entries(snapshot: fixture.snapshot, context: fixture.context, pendingMove: fixture.pending, now: fixture.now)
     }
 
     private static func makeFixture(_ scenario: String) throws -> Fixture {
@@ -143,7 +153,20 @@ private enum BenchmarkFailure: Error {
         let context = ActionContext(invocationID: stableUUID(5000), entryPoint: .items,
                                     container: FileReference(refID: stableUUID(5001), url: URL(fileURLWithPath: "/RightMouseBenchmark/selection", isDirectory: true), kindHint: .directory), selection: selection)
         let now = Date(timeIntervalSince1970: 1_800_000_000)
-        return Fixture(configuration: configuration, context: context,
+        // Match Finder's already decoded, authority-free snapshot input. Recent
+        // entries need display metadata only, not manufactured security bookmarks.
+        // Three of ten targets overlap favorites, exercising real deduplication.
+        let encoded = try JSONEncoder().encode(MenuConfigurationSnapshot(configuration: configuration))
+        var object = try JSONSerialization.jsonObject(with: encoded) as! [String: Any]
+        object["recentDestinations"] = (0..<10).map { index in
+            ["id": stableUUID(7000 + index).uuidString,
+             "name": "最近目录 \(index + 1)",
+             "path": index < 3 ? "/RightMouseBenchmark/favorites/\(index)" : "/RightMouseBenchmark/recent/\(index)",
+             "order": index] as [String: Any]
+        }
+        let snapshot = try JSONDecoder().decode(MenuConfigurationSnapshot.self, from: JSONSerialization.data(withJSONObject: object))
+        try snapshot.validate()
+        return Fixture(snapshot: snapshot, context: context,
                        pending: PendingMoveSnapshot(token: stableUUID(6000), count: 16, expiresAt: now.addingTimeInterval(120)),
                        now: now, distinctParents: parentCount)
     }
@@ -152,7 +175,7 @@ private enum BenchmarkFailure: Error {
         UUID(uuidString: String(format: "00000000-0000-4000-8000-%012llx", Int64(value)))!
     }
     private struct Counts: Equatable {
-        var top = 0, total = 0, executable = 0, disabled = 0, titleLength = 0
+        var top = 0, total = 0, executable = 0, disabled = 0, titleLength = 0, recentMenus = 0, recentLeaves = 0
     }
     private static func counts(_ entries: [MenuEntry]) -> Counts {
         var value = Counts(); value.top = entries.count
@@ -160,6 +183,8 @@ private enum BenchmarkFailure: Error {
             for entry in entries {
                 value.total += 1; value.titleLength += entry.title.utf8.count
                 if entry.action != nil { value.executable += 1 }
+                if entry.id == "copy.recent" || entry.id == "move.recent" { value.recentMenus += 1 }
+                if entry.id.hasPrefix("copy.recent.") || entry.id.hasPrefix("move.recent.") { value.recentLeaves += 1 }
                 if !entry.enabled { value.disabled += 1 }
                 walk(entry.children)
             }

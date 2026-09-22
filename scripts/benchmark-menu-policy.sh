@@ -2,10 +2,14 @@
 set -euo pipefail
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-build_dir="$repo_dir/.build/menu-benchmark"
+build_dir="${RIGHTMOUSE_MENU_BENCHMARK_BUILD_DIR:-$repo_dir/.build/menu-benchmark}"
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 output_dir="${1:-$build_dir/results/$stamp}"
 mkdir -p "$build_dir/modules" "$build_dir/module-cache" "$output_dir"
+if [[ -n "$(find "$output_dir" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+    echo "Refusing to overwrite existing benchmark evidence: $output_dir" >&2
+    exit 1
+fi
 cd "$repo_dir"
 sdk=$(xcrun --sdk macosx --show-sdk-path)
 snapshot_dir="$build_dir/snapshots/$stamp"
@@ -53,11 +57,11 @@ metadata = {
     "sourceSHA256": json.loads((snapshot / "source-hashes.json").read_text()),
     "buildInputSnapshot": str(snapshot.relative_to(repo)),
     "binarySHA256": hashlib.sha256(binary.read_bytes()).hexdigest(),
-    "scope": "Pure MenuPolicy rule generation only. This evidence does not satisfy AC-027 Finder menu construction acceptance.",
+    "scope": "Pure MenuPolicy.entries(snapshot:) rule generation on an already decoded MenuConfigurationSnapshot with ten recent destinations. Excludes projection, JSON decoding, Finder, NSMenu, configuration IO and IPC. This evidence does not satisfy AC-027 Finder menu construction acceptance.",
     "coldDefinition": "First timed MenuPolicy call in a new executable process after fixture setup. No warmup; OS/framework caches are not flushed.",
-    "timing": "DispatchTime monotonic nanoseconds; fixture setup, validation, recursive output verification, destruction, and JSON encoding outside the measured call interval.",
+    "timing": "DispatchTime monotonic nanoseconds; fixture setup, AppConfiguration projection, snapshot JSON decoding/validation, recursive output verification, destruction, and JSON encoding outside the measured call interval.",
     "samplePolicy": "100 sequential calls per scenario, all raw samples retained, no outlier removal; each scenario uses a separate new process.",
-    "limitations": ["No Finder invocation or NSMenu materialization", "No disk configuration loading, bookmarks, or IPC", "No machine exclusivity or CPU affinity; other work can affect results", "Synthetic maximal stored configuration; normal UI starts with eight action categories", "First process call is not a cold OS boot measurement"]
+    "limitations": ["No Finder invocation or NSMenu materialization", "No disk configuration loading, bookmarks, or IPC", "No machine exclusivity or CPU affinity; other work can affect results", "Synthetic maximal decoded menu snapshot; normal UI starts with eight action categories", "Ten recent destinations are display-only snapshot entries; three overlap favorites and seven appear in each transfer submenu", "First process call is not a cold OS boot measurement"]
 }
 (output / "environment.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n")
 for scenario in ("100-actions-one-selection", "100-actions-1024-selection", "8-actions-one-selection"):
@@ -67,6 +71,9 @@ for scenario in ("100-actions-one-selection", "100-actions-1024-selection", "8-a
     measured = json.loads(result.stdout)
     assert measured["sampleCount"] == len(measured["rawMilliseconds"]) == 100
     assert measured["allSamplesRetained"]
+    assert measured["recentDestinations"] == 10
+    assert measured["recentFavoriteDuplicates"] == 3
+    assert measured["recentEntriesPerTransferMenu"] == 7
     assert measured["p95Milliseconds"] == sorted(measured["rawMilliseconds"])[94]
     (output / (scenario + ".json")).write_text(result.stdout)
     print(f'{scenario}: first={measured["firstSampleMilliseconds"]:.3f} ms, P95={measured["p95Milliseconds"]:.3f} ms, max={measured["maximumMilliseconds"]:.3f} ms, nodes={measured["totalTreeEntries"]}, samples=100')

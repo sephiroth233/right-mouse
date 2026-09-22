@@ -1,0 +1,20 @@
+{
+  "Packages/RightMouseCore/Sources/RightMouseCore/Diagnostics/DiagnosticLog.swift": "4a1a37642aabcfdd9aa95169e72994a86d94386508d88c232932930a11e1473d",
+  "Packages/RightMouseCore/Sources/RightMouseCore/FileOperations/FileTransferEngine.swift": "70da0a37f52a53db3fe89a0bfac6ba57d0d7cb69eda81cfb0eba785c1cfa3640",
+  "Packages/RightMouseCore/Sources/RightMouseCore/FileOperations/StagingRecovery.swift": "b14b2dcfc127d671df76addbf493feec1a9e48cbc650f15b881823ff77acf60e",
+  "Packages/RightMouseCore/Sources/RightMouseCore/FileOperations/TransferFailureMapping.swift": "302feb7dbf15bebc1bb61328d79cb84f03256f37733bc3eb3b70ae7d31ae2e23",
+  "Packages/RightMouseCore/Sources/RightMouseCore/FileOperations/TransferFileSystem.swift": "120a53c42e0985c236a86dd9dac6a208397166a24272d9621295a979435b25e3",
+  "Packages/RightMouseCore/Sources/RightMouseCore/FileOperations/TransferTypes.swift": "9259b511d6db3e93a83dc8fa6a08726e93ffc91a79cc6bda9381c3afad46b787",
+  "Packages/RightMouseCore/Sources/RightMouseCore/Menu/MenuConfigurationSnapshot.swift": "4fbbcf0455c1446559f0d67e66dbe20200000a6df3c741b498b281fc784d4f13",
+  "Packages/RightMouseCore/Sources/RightMouseCore/Menu/MenuPolicy.swift": "735a2f045dde306cc04beeb2196f8f94371c254e19b0494dcba8c15c21c59514",
+  "Packages/RightMouseCore/Sources/RightMouseCore/Protocol/Command.swift": "d1b2371d07b307ba699dd83900d349d1b72a84a0238aaa355102d3660651a408",
+  "Packages/RightMouseCore/Sources/RightMouseCore/Protocol/PrivateStorageMigration.swift": "39b08b3b80fdbccc6e832eca192f37485d3e0794f1039b692794080e6fd1c571",
+  "Packages/RightMouseCore/Sources/RightMouseCore/Protocol/RequestValidator.swift": "9edd69fff9c20ba8a4c4a7184f3e3c3f3b76642e18e280f8a50384bb404f05e4",
+  "Packages/RightMouseCore/Sources/RightMouseCore/Protocol/SharedStorage.swift": "8c0cfa20488b99313b47bc518d7b8047cbc5203adb0e9f8d36081f95a37e02e4",
+  "Packages/RightMouseCore/Sources/RightMouseCore/Recovery/RecoveryEvidenceStore.swift": "02d439045c2f5634b4147cdf33b0b0dc0eb7eec2ae93cc081def3e4d644cdde4",
+  "Packages/RightMouseCore/Sources/RightMouseCore/Settings/Configuration.swift": "b70eb9e3bfc9d5d5b49fa7ad37c3a8822108d4c710a00592cb1d7f1bbc5e005e",
+  "Packages/RightMouseCore/Sources/RightMouseCore/Settings/RecentDestinations.swift": "c35cee45468590b0cd82724a9a7dc778ae572a981ee32da18e2f2f662cefd862",
+  "Packages/RightMouseCore/Sources/RightMouseCore/Templates/TemplateStore.swift": "3883fdd9125cb86c99bb89520396f71b91ed29a3a4ff1af83b1df743695db42c",
+  "tools/MenuPolicyBenchmark/main.swift": "5c9802904dba4ef5406f8abb313e6d25503b05056bbe5e011a4bee8ac7fbc8e1",
+  "scripts/benchmark-menu-policy.sh": "fa8310d3b7a3c141622eb30620cddfe1bd9c3d0f86c10b63e629849ac6cdbde5"
+}
