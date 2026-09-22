@@ -44,7 +44,7 @@
 
 开发包为 `dist/RightMouse-0.1.0-development.zip`，本轮 SHA-256：`d0da5b9fb3a5381dbcdf5a87622915d87087ad92f114e5ac1cb9cd35ebfa0797`。文档风格校验没有结构错误；外部来源和通用高可用章节提示不适用于本地代码及夹具证据，因此保留为非阻断警告。
 
-仍需编码：持久暂存归属及显式清理、首次 TXT 创建演练、宿主私有存储与共享快照分层、损坏日志去重保全副本。相关任务保持未完成，见[V1 实现差距](EV-implementation-gaps-001.md)。真实 Finder 通信仍需要有效 App Group 授权；开发签名校验不证明共享访问成功，也不等同于公证发行。
+本记录形成时，持久暂存归属、首次 TXT 演练、私有存储分层和原始备份仍待编码；后续实现与验证见[私有存储与恢复集成记录](EV-private-storage-recovery-001.md)。整项任务的系统验收仍见[V1 实现差距](EV-implementation-gaps-001.md)。真实 Finder 通信仍需要有效 App Group 授权；开发签名校验不证明共享访问成功，也不等同于公证发行。
 
 ## 参考
 
