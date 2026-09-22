@@ -85,10 +85,17 @@ public struct TransferJournalRecord: Codable, Sendable {
     public var stagingParentIdentity: TransferFileIdentity?
     public var stagingCleanupURL: URL?
     public var stagingCleanupState: StagingCleanupState?
+    /// Private same-parent quarantine used while a verified cross-volume source is removed.
+    /// A non-nil value is recovery evidence only; recovery must never replay deletion.
+    public var sourceCleanupURL: URL?
+    public var sourceCleanupIdentity: TransferFileIdentity?
+    public var sourceCleanupContainerIdentity: TransferFileIdentity?
+    public var sourceCleanupState: SourceCleanupState?
     public var result: TransferItemResult?
 }
 
 public enum StagingCleanupState: String, Codable, Sendable { case requested, completed, needsReview }
+public enum SourceCleanupState: String, Codable, Sendable { case isolating, isolated, completed, needsReview }
 
 public struct StagingCleanupToken: Codable, Sendable {
     public let operationID: UUID

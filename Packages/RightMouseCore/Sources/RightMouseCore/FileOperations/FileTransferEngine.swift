@@ -142,9 +142,13 @@ public actor FileTransferEngine {
                     try TransferFileSystem.coordinateMutation(source: source, destination: destination) {
                         try checkTargetIdentity(target, expected: targetIdentity)
                         guard try TransferFileSystem.manifest(source, cancellation: cancellation) == sourceSnapshot else { throw TransferEngineError.sourceChanged }
+                        try phaseHookForTesting?("immediatelyBeforeSourceRename", source, destination)
                         try TransferFileSystem.renameExclusive(objectToCommit, destination)
+                        // The namespace mutation has happened even if coordination or a following
+                        // validation reports an error. Status handling must preserve that fact.
+                        committed = true
+                        try phaseHookForTesting?("immediatelyAfterSourceRename", source, destination)
                     }
-                    committed = true
                     break
                 } catch TransferEngineError.occupied {
                     let decision = await decide(policy: policy, source: source, destination: destination, resolve: resolveConflict)
@@ -159,6 +163,17 @@ public actor FileTransferEngine {
                     }
                 }
             }
+            try checkTargetIdentity(target, expected: targetIdentity)
+            let committedManifest = try TransferFileSystem.manifest(destination, cancellation: cancellation)
+            if mode == .move && sameVolume {
+                guard TransferFileSystem.sameObjectsAfterRename(sourceSnapshot!, committedManifest) else {
+                    throw TransferEngineError.sourceChanged
+                }
+            } else {
+                guard TransferFileSystem.equivalent(sourceSnapshot!, committedManifest) else {
+                    throw TransferEngineError.verificationFailed
+                }
+            }
             record.destinationIdentity = try TransferFileSystem.identity(destination)
             record.phase = "targetCommitted"; try save(record)
             try phaseHookForTesting?("afterCommit", source, destination)
@@ -170,9 +185,8 @@ public actor FileTransferEngine {
                 record.phase = "sourceCleanupPending"; try save(record)
                 try phaseHookForTesting?("beforeSourceCleanup", source, destination)
                 progress("sourceCleanup")
-                try TransferFileSystem.coordinateMutation(source: source, destination: destination) {
-                    try TransferFileSystem.removeVerified(source, target: destination, expected: sourceSnapshot!, cancellation: cancellation)
-                }
+                try isolateVerifyAndRemoveSource(source, target: destination, expected: sourceSnapshot!, targetIdentity: targetIdentity,
+                                                 record: &record, cancellation: cancellation)
                 record.phase = "sourceRemoved"; try save(record)
             }
             try cleanStaging(stagingContainer)
@@ -181,7 +195,9 @@ public actor FileTransferEngine {
             return try finish(&record, .init(itemID: record.itemID, operationID: operationID, source: source, destination: destination, status: .completed, message: mode == .move ? "移动完成。" : "复制完成。", undoToken: undo))
         } catch {
             let status: TransferItemStatus
-            if committed {
+            if record.sourceCleanupURL != nil {
+                status = .needsReview
+            } else if committed {
                 status = mode == .move && !sameVolume && TransferFileSystem.exists(source) ? .sourceRetained : .needsReview
             } else if let engineError = error as? TransferEngineError, case .cancelled = engineError { status = .cancelled }
             else { status = .failed }
@@ -211,6 +227,82 @@ public actor FileTransferEngine {
         }
         guard current.device == expected.device, current.inode == expected.inode, current.kind == expected.kind else {
             throw TransferEngineError.invalidTarget
+        }
+    }
+
+    private func isolateVerifyAndRemoveSource(_ source: URL, target: URL, expected: [String: TransferSnapshot],
+                                              targetIdentity: TransferFileIdentity, record: inout TransferJournalRecord,
+                                              cancellation: TransferCancellation) throws {
+        // Preserve the previous no-side-effect behavior when the source or committed target
+        // already changed before cleanup begins.
+        guard try TransferFileSystem.manifest(source, cancellation: cancellation) == expected,
+              TransferFileSystem.equivalent(expected, try TransferFileSystem.manifest(target, cancellation: cancellation)) else {
+            throw TransferEngineError.sourceChanged
+        }
+        let parent = source.deletingLastPathComponent()
+        let parentIdentity = try TransferFileSystem.identity(parent)
+        let container = parent.appendingPathComponent(".rightmouse-cleanup-\(record.itemID.uuidString)", isDirectory: true)
+        let isolated = container.appendingPathComponent("payload")
+        guard mkdir(container.path, 0o700) == 0 else { throw TransferEngineError.system(errno) }
+        let containerIdentity = try TransferFileSystem.identity(container)
+        record.sourceCleanupURL = isolated
+        record.sourceCleanupContainerIdentity = containerIdentity
+        record.sourceCleanupState = .isolating
+        record.phase = "sourceCleanupIsolating"
+        try save(record)
+        do {
+            try TransferFileSystem.coordinateMutation(source: source, destination: isolated) {
+                try checkTargetIdentity(target.deletingLastPathComponent(), expected: targetIdentity)
+                let currentParent = try TransferFileSystem.identity(parent)
+                guard currentParent.device == parentIdentity.device, currentParent.inode == parentIdentity.inode,
+                      currentParent.kind == parentIdentity.kind,
+                      try TransferFileSystem.manifest(source, cancellation: cancellation) == expected else {
+                    throw TransferEngineError.sourceChanged
+                }
+                try phaseHookForTesting?("immediatelyBeforeSourceIsolationRename", source, isolated)
+                try TransferFileSystem.renameExclusive(source, isolated)
+            }
+            record.sourceCleanupIdentity = try TransferFileSystem.identity(isolated)
+            record.sourceCleanupState = .isolated
+            record.phase = "sourceCleanupIsolated"
+            try save(record)
+            try phaseHookForTesting?("afterSourceIsolation", source, isolated)
+            try TransferFileSystem.check(cancellation)
+            try checkTargetIdentity(target.deletingLastPathComponent(), expected: targetIdentity)
+            let isolatedManifest = try TransferFileSystem.manifest(isolated, cancellation: cancellation)
+            guard TransferFileSystem.sameObjectsAfterRename(expected, isolatedManifest),
+                  TransferFileSystem.equivalent(expected, try TransferFileSystem.manifest(target, cancellation: cancellation)) else {
+                throw TransferEngineError.sourceChanged
+            }
+            let actualContainer = try TransferFileSystem.identity(container)
+            guard actualContainer.device == containerIdentity.device, actualContainer.inode == containerIdentity.inode,
+                  actualContainer.kind == containerIdentity.kind else { throw TransferEngineError.sourceChanged }
+            // Keep the original per-entry source/target verification. Isolation prevents a
+            // later object at the public source path from becoming a cleanup target.
+            try TransferFileSystem.removeVerified(isolated, target: target, expected: isolatedManifest, cancellation: cancellation)
+            guard rmdir(container.path) == 0 else { throw TransferEngineError.system(errno) }
+            record.sourceCleanupState = .completed
+            record.sourceCleanupURL = nil
+            record.sourceCleanupIdentity = nil
+            record.sourceCleanupContainerIdentity = nil
+        } catch {
+            // If isolation never happened, the empty owned container can be removed and the
+            // ordinary source-retained result remains accurate. Once payload exists, preserve it.
+            if !TransferFileSystem.exists(isolated),
+               let actual = try? TransferFileSystem.identity(container),
+               actual.device == containerIdentity.device, actual.inode == containerIdentity.inode,
+               actual.kind == containerIdentity.kind, rmdir(container.path) == 0 {
+                record.sourceCleanupURL = nil
+                record.sourceCleanupIdentity = nil
+                record.sourceCleanupContainerIdentity = nil
+                record.sourceCleanupState = nil
+                record.phase = "sourceCleanupPending"
+            } else {
+                record.sourceCleanupState = .needsReview
+                record.phase = "sourceCleanupNeedsReview"
+            }
+            try? save(record)
+            throw error
         }
     }
 
@@ -293,6 +385,7 @@ public actor FileTransferEngine {
         guard record.schemaVersion == 1, record.itemID == fileID else { throw TransferEngineError.journalVersion }
         try validateLocal(record.source); try validateLocal(record.destination)
         if let staging = record.stagingURL { try validateLocal(staging) }
+        if let cleanup = record.sourceCleanupURL { try validateLocal(cleanup) }
         if let result = record.result {
             guard result.itemID == record.itemID, result.operationID == nil || result.operationID == record.operationID else { throw TransferEngineError.journalVersion }
             try validateLocal(result.source)
@@ -309,6 +402,9 @@ public actor FileTransferEngine {
     /// Recovery never replays mutations. A nonterminal record is returned for explicit user review.
     public func recoveryAssessment(_ record: TransferJournalRecord) -> String {
         guard record.schemaVersion == 1 else { return "记录版本未知，请保留现场。" }
+        if record.sourceCleanupURL != nil {
+            return "来源已进入私有清理隔离区或隔离状态不确定；请核对隔离对象、目标和原路径，不自动删除或重放。"
+        }
         let source = try? TransferFileSystem.identity(record.source)
         let target = try? TransferFileSystem.identity(record.destination)
         if let expected = record.destinationIdentity, target == expected {
@@ -321,7 +417,10 @@ public actor FileTransferEngine {
         guard !running, !TransferFileSystem.exists(token.originalURL),
               try TransferFileSystem.identity(token.currentURL) == token.identity else { throw TransferEngineError.unsafeUndo }
         running = true; defer { running = false }
-        guard try TransferFileSystem.fingerprint(TransferFileSystem.manifest(token.currentURL, cancellation: TransferCancellation())) == token.contentFingerprint else { throw TransferEngineError.unsafeUndo }
+        let expectedManifest = try TransferFileSystem.manifest(token.currentURL, cancellation: TransferCancellation())
+        guard try TransferFileSystem.fingerprint(expectedManifest) == token.contentFingerprint else { throw TransferEngineError.unsafeUndo }
+        let originalParent = token.originalURL.deletingLastPathComponent()
+        let originalParentIdentity = try TransferFileSystem.identity(originalParent)
         var record = TransferJournalRecord(operationID: operationID, itemID: UUID(), source: token.currentURL, destination: token.originalURL, mode: .move, phase: "undoCommitting")
         record.sourceIdentity = token.identity
         try save(record)
@@ -329,7 +428,15 @@ public actor FileTransferEngine {
         try TransferFileSystem.coordinateMutation(source: token.currentURL, destination: token.originalURL) {
             guard try TransferFileSystem.identity(token.currentURL) == token.identity,
                   try TransferFileSystem.fingerprint(TransferFileSystem.manifest(token.currentURL, cancellation: TransferCancellation())) == token.contentFingerprint else { throw TransferEngineError.unsafeUndo }
+            try phaseHookForTesting?("immediatelyBeforeUndoRename", token.currentURL, token.originalURL)
             try TransferFileSystem.renameExclusive(token.currentURL, token.originalURL)
+            try phaseHookForTesting?("immediatelyAfterUndoRename", token.currentURL, token.originalURL)
+        }
+        let currentParent = try TransferFileSystem.identity(originalParent)
+        guard currentParent.device == originalParentIdentity.device, currentParent.inode == originalParentIdentity.inode,
+              currentParent.kind == originalParentIdentity.kind,
+              TransferFileSystem.sameObjectsAfterRename(expectedManifest, try TransferFileSystem.manifest(token.originalURL, cancellation: TransferCancellation())) else {
+            throw TransferEngineError.unsafeUndo
         }
         record.destinationIdentity = try TransferFileSystem.identity(token.originalURL)
         _ = try finish(&record, .init(itemID: record.itemID, operationID: record.operationID, source: token.currentURL, destination: token.originalURL, status: .completed, message: "已撤销移动。"))

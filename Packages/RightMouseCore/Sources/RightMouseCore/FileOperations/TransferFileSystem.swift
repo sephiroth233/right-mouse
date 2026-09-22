@@ -82,6 +82,20 @@ enum TransferFileSystem {
         }
     }
 
+    /// A rename can change ctime without changing the object selected by the user.
+    /// Compare inode identity, content, relevant metadata, size and mtime, while deliberately
+    /// ignoring only ctime. This is stricter than `equivalent`, which is intended for copies.
+    static func sameObjectsAfterRename(_ before: [String: TransferSnapshot], _ after: [String: TransferSnapshot]) -> Bool {
+        guard before.keys.sorted() == after.keys.sorted() else { return false }
+        return before.allSatisfy { key, value in
+            guard let other = after[key] else { return false }
+            let a = value.identity, b = other.identity
+            return a.device == b.device && a.inode == b.inode && a.kind == b.kind && a.size == b.size
+                && a.modifiedSeconds == b.modifiedSeconds && a.modifiedNanoseconds == b.modifiedNanoseconds
+                && value.digest == other.digest && value.metadata == other.metadata
+        }
+    }
+
     static func metadataDigest(_ url: URL) throws -> String {
         var info = stat()
         guard lstat(url.path, &info) == 0 else { throw TransferEngineError.system(errno) }
@@ -160,6 +174,7 @@ enum TransferFileSystem {
         let targetSnapshot = try manifest(target, cancellation: cancellation)
         guard equivalent(expected, targetSnapshot) else { throw TransferEngineError.verificationFailed }
         let sorted = expected.keys.sorted { $0.split(separator: "/").count > $1.split(separator: "/").count }
+        var unlinkedIdentities = Set<String>()
         for key in sorted {
             try check(cancellation)
             let url = key.isEmpty ? source : source.appendingPathComponent(key)
@@ -171,10 +186,19 @@ enum TransferFileSystem {
                 guard rmdir(url.path) == 0 else { throw TransferEngineError.system(errno) }
             } else {
                 let currentManifest = try manifest(url, cancellation: cancellation)
-                guard currentManifest[""] == snapshot else { throw TransferEngineError.sourceChanged }
+                let identityKey = "\(snapshot.identity.device):\(snapshot.identity.inode)"
+                // Removing one name of a hard-linked file changes ctime for its remaining
+                // names. Permit only that cleanup-induced ctime delta for an inode already
+                // unlinked by this loop; all content, metadata, size, mtime and inode fields
+                // remain checked.
+                let sourceMatches = unlinkedIdentities.contains(identityKey)
+                    ? sameObjectsAfterRename(["": snapshot], currentManifest)
+                    : currentManifest[""] == snapshot
+                guard sourceMatches else { throw TransferEngineError.sourceChanged }
                 let targetURL = key.isEmpty ? target : target.appendingPathComponent(key)
                 guard try manifest(targetURL, cancellation: cancellation)[""] == targetSnapshot[key] else { throw TransferEngineError.verificationFailed }
                 guard unlink(url.path) == 0 else { throw TransferEngineError.system(errno) }
+                unlinkedIdentities.insert(identityKey)
             }
         }
     }

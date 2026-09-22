@@ -17,6 +17,7 @@ do {
     total += try runRecoveryEvidenceChecks()
     total += try runStorageSeparationChecks()
     total += try await runStagingRecoveryChecks()
+    total += try await runRaceChecks()
     print("PASS: \(total) core fixture checks; real Finder, TCC, signing and multi-volume checks remain separate.")
 } catch {
     fputs("FAIL: \(error)\n", stderr)
