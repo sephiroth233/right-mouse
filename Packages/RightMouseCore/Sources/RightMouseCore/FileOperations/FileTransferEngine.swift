@@ -30,8 +30,9 @@ public actor FileTransferEngine {
         var results: [TransferItemResult] = []
         let destinationDirectory = target.resolvingSymlinksInPath().standardizedFileURL
         do {
+            let targetIdentity = try TransferFileSystem.identity(destinationDirectory)
             guard !sources.isEmpty, sources.count <= 1024, target.isFileURL,
-                  try TransferFileSystem.identity(destinationDirectory).kind == S_IFDIR else { throw TransferEngineError.invalidTarget }
+                  targetIdentity.kind == S_IFDIR else { throw TransferEngineError.invalidTarget }
             try PrivateFileIO.ensureDirectory(journalDirectory)
             for rawSource in sources {
                 if !rawSource.isFileURL {
@@ -40,7 +41,7 @@ public actor FileTransferEngine {
                 }
                 // Resolve parents, keeping the selected symbolic link itself intact.
                 let source = rawSource.deletingLastPathComponent().resolvingSymlinksInPath().appendingPathComponent(rawSource.lastPathComponent).standardizedFileURL
-                let result = await transferOne(source: source, target: destinationDirectory, mode: mode, policy: conflictPolicy, cancellation: cancellation, operationID: operationID, completed: results.count, total: sources.count, onProgress: onProgress, resolveConflict: resolveConflict)
+                let result = await transferOne(source: source, target: destinationDirectory, targetIdentity: targetIdentity, mode: mode, policy: conflictPolicy, cancellation: cancellation, operationID: operationID, completed: results.count, total: sources.count, onProgress: onProgress, resolveConflict: resolveConflict)
                 results.append(result)
                 onProgress?(TransferProgress(operationID: operationID, completedItems: results.count, totalItems: sources.count, phase: result.status.rawValue, bytesProcessed: 0))
             }
@@ -50,7 +51,7 @@ public actor FileTransferEngine {
         return TransferResult(operationID: operationID, items: results)
     }
 
-    private func transferOne(source: URL, target: URL, mode: TransferMode, policy: TransferConflictPolicy,
+    private func transferOne(source: URL, target: URL, targetIdentity: TransferFileIdentity, mode: TransferMode, policy: TransferConflictPolicy,
                              cancellation: TransferCancellation, operationID: UUID, completed: Int, total: Int,
                              onProgress: (@Sendable (TransferProgress) -> Void)?,
                              resolveConflict: (@Sendable (URL, URL) async -> TransferConflictDecision)?) async -> TransferItemResult {
@@ -76,8 +77,10 @@ public actor FileTransferEngine {
             if identity.kind == S_IFDIR && (target.path == source.path || target.path.hasPrefix(source.path + "/")) { throw TransferEngineError.descendantTarget }
             record.sourceIdentity = identity
             try save(record)
+            try checkTargetIdentity(target, expected: targetIdentity)
             if TransferFileSystem.exists(destination) {
                 let decision = await decide(policy: policy, source: source, destination: destination, resolve: resolveConflict)
+                try checkTargetIdentity(target, expected: targetIdentity)
                 switch decision {
                 case .skip: return try finish(&record, .init(itemID: record.itemID, operationID: operationID, source: source, destination: destination, status: .skipped, message: "目标同名，已跳过。"))
                 case .cancel: cancellation.cancel(); throw TransferEngineError.cancelled
@@ -85,6 +88,7 @@ public actor FileTransferEngine {
                 }
             }
             try TransferFileSystem.check(cancellation)
+            try checkTargetIdentity(target, expected: targetIdentity)
             // A full manifest also rejects unsupported descendants before a same-volume move.
             progress("scanning")
             sourceSnapshot = try TransferFileSystem.manifest(source, cancellation: cancellation)
@@ -118,6 +122,7 @@ public actor FileTransferEngine {
                 try phaseHookForTesting?("beforeCommit", source, destination)
                 do {
                     try TransferFileSystem.coordinateMutation(source: source, destination: destination) {
+                        try checkTargetIdentity(target, expected: targetIdentity)
                         guard try TransferFileSystem.manifest(source, cancellation: cancellation) == sourceSnapshot else { throw TransferEngineError.sourceChanged }
                         try TransferFileSystem.renameExclusive(objectToCommit, destination)
                     }
@@ -125,6 +130,7 @@ public actor FileTransferEngine {
                     break
                 } catch TransferEngineError.occupied {
                     let decision = await decide(policy: policy, source: source, destination: destination, resolve: resolveConflict)
+                    try checkTargetIdentity(target, expected: targetIdentity)
                     switch decision {
                     case .skip:
                         try cleanStaging(stagingContainer)
@@ -165,6 +171,13 @@ public actor FileTransferEngine {
                                             message: committed ? "目标已提交；\(error.localizedDescription) 请核对操作记录。" : error.localizedDescription)
             do { return try finish(&record, result) }
             catch { return .init(itemID: record.itemID, operationID: operationID, source: source, destination: committed ? destination : nil, status: committed ? .needsReview : .failed, message: "操作记录写入失败，停止后续副作用。请核对来源和目标。") }
+        }
+    }
+
+    private func checkTargetIdentity(_ url: URL, expected: TransferFileIdentity) throws {
+        let current = try TransferFileSystem.identity(url)
+        guard current.device == expected.device, current.inode == expected.inode, current.kind == expected.kind else {
+            throw TransferEngineError.invalidTarget
         }
     }
 

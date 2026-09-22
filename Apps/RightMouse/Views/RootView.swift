@@ -3,7 +3,7 @@ import AppKit
 import RightMouseCore
 
 private enum SettingsPage: String, CaseIterable, Identifiable {
-    case general = "通用", tools = "文件操作台", menus = "菜单管理", templates = "新建文件", favorites = "常用目录", applications = "打开方式", operations = "文件操作", diagnostics = "权限与诊断", tasks = "任务记录"
+    case general = "通用", tools = "文件操作台", menus = "菜单管理", templates = "新建文件", favorites = "常用目录", recent = "最近目标", applications = "打开方式", operations = "文件操作", diagnostics = "权限与诊断", tasks = "任务记录"
     var id: Self { self }
     var icon: String {
         switch self {
@@ -12,6 +12,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .menus: return "list.bullet.indent"
         case .templates: return "doc.badge.plus"
         case .favorites: return "folder.badge.gearshape"
+        case .recent: return "clock.badge.checkmark"
         case .applications: return "square.grid.2x2"
         case .operations: return "arrow.left.arrow.right"
         case .diagnostics: return "checkmark.shield"
@@ -25,6 +26,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .menus: return "只留下常用操作，按你的习惯排列。"
         case .templates: return "用真实模板创建文件，保留格式与初始内容。"
         case .favorites: return "收藏经常使用的文件夹，一步打开或整理文件。"
+        case .recent: return "最近使用的十个目标目录，选择后可继续整理文件。"
         case .applications: return "在终端、编辑器或其他应用中继续工作。"
         case .operations: return "设置冲突处理，查看文件操作的行为。"
         case .diagnostics: return "管理 Finder 扩展、目录范围与访问权限。"
@@ -87,6 +89,7 @@ struct RootView: View {
                     case .menus: MenuSettingsView(model: model)
                     case .templates: TemplateSettingsView(model: model)
                     case .favorites: ScrollView { LocationSettingsView(model: model, watched: false) }
+                    case .recent: RecentDestinationsView(model: model) { page = .tools }
                     case .applications: ApplicationSettingsView(model: model)
                     case .operations: OperationSettingsView(model: model)
                     case .diagnostics: DiagnosticsSettingsView(model: model)

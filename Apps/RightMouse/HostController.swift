@@ -21,11 +21,22 @@ import Darwin
     private var interactiveIDs: Set<UUID> = []
     private var sessionAuthorizedIDs: Set<UUID> = []
     private var followupParents: [UUID: UUID] = [:]
+    private let conflictPrompt: ConflictPrompt
+    private let projectDirectoryPicker: ProjectDirectoryPicker
+    private let openApplication: ApplicationOpen
+    private var waitingConflicts: Set<UUID> = []
+    private var batchConflictDecisions: [UUID: TransferConflictDecision] = [:]
+    private var conflictFailures: [UUID: CommandFailure] = [:]
+    private var conflictStopNotes: [UUID: String] = [:]
     private var pending: (token: UUID, files: [FileReference], identities: [UUID: String], expires: Date)?
     private let moveType = NSPasteboard.PasteboardType("cn.rightmouse.pending-move")
     var showTasks: (() -> Void)?
 
-    init(storagePaths: SharedPaths? = nil) throws {
+    init(storagePaths: SharedPaths? = nil, conflictPrompt: @escaping ConflictPrompt = ConflictDialog.present,
+         projectDirectoryPicker: @escaping ProjectDirectoryPicker = OpenWithInteraction.chooseProjectDirectory,
+         openApplication: @escaping ApplicationOpen = { urls, integration in try await ApplicationLauncher.open(urls, with: integration) }) throws {
+        self.conflictPrompt = conflictPrompt
+        self.projectDirectoryPicker = projectDirectoryPicker; self.openApplication = openApplication
         if let storagePaths { paths = storagePaths; try paths.prepare() }
         else { paths = try SharedPaths.resolveAndPrepare() }
         model = AppModel(configurationStore: ConfigurationStore(directory: paths.configurationDirectory), templateStore: TemplateStore(directory: paths.templatesDirectory))
@@ -103,8 +114,11 @@ import Darwin
         let components = text.split(separator: ":", maxSplits: 1).map(String.init)
         let name = components[0], argument = components.count > 1 ? components[1] : ""
         let selection = files.map(reference)
-        let context = ActionContext(entryPoint: files.isEmpty ? .container : .items, container: destination.map { reference($0) }, selection: selection)
-        let target = destination.map { reference($0) }
+        var target = destination.map { reference($0) }
+        if destination == model.destination, let recentID = model.selectedRecentDestinationID { target?.bookmarkToken = recentID }
+        let usesDestination = ["createFile", "pasteMove", "copyTo", "moveTo"].contains(name)
+        let context = ActionContext(entryPoint: files.isEmpty ? .container : .items,
+                                    container: usesDestination || files.isEmpty ? target : nil, selection: selection)
         let policy = ConflictPolicy(rawValue: model.configuration.conflictPolicy) ?? .ask
         let action: CommandAction
         switch name {
@@ -139,7 +153,7 @@ import Darwin
             var items: [ItemReceipt] = []
             switch request.action {
             case let .copyText(format):
-                let urls = request.context.selection.isEmpty ? [request.context.container!.url] : request.context.selection.map(\.url)
+                let urls = request.context.selection.isEmpty ? [try resolveStoredReference(request.context.container!)] : request.context.selection.map(\.url)
                 NSPasteboard.general.clearContents(); NSPasteboard.general.setString(PathText.format(urls, as: format), forType: .string)
                 invalidatePending(); model.notice = "已复制 \(urls.count) 项。"
             case .stageMove:
@@ -152,14 +166,17 @@ import Darwin
             case let .createFile(templateID, destination, name):
                 guard let template = model.configuration.templates.first(where: { $0.id == templateID }) else { throw CommandFailure(.invalidRequest, "模板不存在，请刷新菜单") }
                 let target = try chooseTarget(try targetURL(destination, context: request.context), context: request.context, infer: false)
+                if target.startAccessingSecurityScopedResource() { scopes.append(target) }
                 try update(id, status: .running)
                 let store = model.templateStore
                 effectStarted = true
                 let created = try await Task.detached { try store.create(template: template, in: target, filename: name, date: request.createdAt) }.value
                 items = [ItemReceipt(status: "success", destinationURL: created)]
+                model.rememberDestination(target)
                 if model.configuration.revealCreatedFile { NSWorkspace.shared.activateFileViewerSelecting([created]) }
             case let .transfer(mode, destination, policy):
-                let target = try chooseTarget(destination?.url, context: request.context, infer: false)
+                let target = try chooseTarget(try targetURL(destination, context: request.context), context: request.context, infer: false)
+                if target.startAccessingSecurityScopedResource() { scopes.append(target) }
                 await transfer(request, sources: request.context.selection.map(\.url), destination: target, mode: mode, policy: policy, grantedScopes: scopes)
                 return
             case let .pasteMove(token, destination, policy):
@@ -168,6 +185,7 @@ import Darwin
                     guard try identity(file.url) == state.identities[file.refID] else { throw CommandFailure(.sourceChanged, "剪切后的来源已改变，请重新选择") }
                 }
                 let target = try chooseTarget(try targetURL(destination, context: request.context), context: request.context, infer: false)
+                if target.startAccessingSecurityScopedResource() { scopes.append(target) }
                 await transfer(request, sources: state.files.map(\.url), destination: target, mode: .move, policy: policy, grantedScopes: scopes)
                 if let result = results[id], pending?.token == token {
                     let done = Set(result.items.filter { $0.status == .completed }.map { $0.source.standardizedFileURL.path })
@@ -182,10 +200,22 @@ import Darwin
             case let .openWith(integrationID, mode):
                 guard let integration = model.configuration.integrations.first(where: { $0.id == integrationID && $0.enabled }) else { throw CommandFailure(.appUnavailable, "打开方式已停用或不存在") }
                 let urls: [URL]
-                if mode == .directory { urls = [try chooseTarget(try contextDirectory(request.context), context: request.context, infer: false)] }
+                if mode == .directory || integration.adapterType == "terminal" { urls = [try chooseTarget(try contextDirectory(request.context), context: request.context, infer: false)] }
                 else { urls = request.context.selection.map(\.url) }
                 guard !urls.isEmpty else { throw CommandFailure(.contextUnavailable, "请选择要打开的文件") }
-                try await ApplicationLauncher.open(urls, with: integration)
+                switch try ApplicationLauncher.plan(urls, with: integration) {
+                case .launch(let planned): try await openApplication(planned, integration)
+                case .chooseProjectDirectory:
+                    try update(id, status: .waitingForUser)
+                    guard let project = projectDirectoryPicker() else { throw CommandFailure(.cancelled, "已取消选择项目目录，未启动应用。") }
+                    guard project.isFileURL, try project.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else {
+                        throw CommandFailure(.invalidDestination, "请选择有效的项目目录。")
+                    }
+                    if project.startAccessingSecurityScopedResource() { scopes.append(project) }
+                    try update(id, status: .running)
+                    try await openApplication([project], integration)
+                }
+                model.notice = "已将所选项目交给 \(integration.name)。"
             }
             try update(id, status: .completed, items: items)
             if request.action.changesFiles {
@@ -203,6 +233,10 @@ import Darwin
 
     private func transfer(_ request: CommandRequest, sources: [URL], destination: URL, mode: CommandTransferMode, policy: ConflictPolicy, grantedScopes: [URL]) async {
         let id = request.requestID
+        defer {
+            waitingConflicts.remove(id); batchConflictDecisions[id] = nil
+            conflictFailures[id] = nil; conflictStopNotes[id] = nil
+        }
         let cancellation = cancellations[id] ?? TransferCancellation()
         cancellations[id] = cancellation
         do {
@@ -223,12 +257,21 @@ import Darwin
             onProgress: { [weak self] progress in
                 Task { @MainActor in
                     guard let self, self.activeIDs.contains(id), self.results[id] == nil else { return }
+                    if self.waitingConflicts.contains(id) {
+                        if var waiting = self.model.tasks.first(where: { $0.id == id }) {
+                            waiting.completed = max(waiting.completed, progress.completedItems)
+                            waiting.total = progress.totalItems
+                            self.model.updateTask(waiting)
+                        }
+                        return
+                    }
                     self.model.updateTask(TaskPresentation(id: id, title: self.title(request.action), status: "处理中", detail: self.phaseTitle(progress.phase), completed: progress.completedItems, total: progress.totalItems, canCancel: true))
                 }
             }, resolveConflict: { [weak self] source, target in
-                await self?.resolveConflict(source: source, target: target) ?? .cancel
+                await self?.resolveConflict(id: id, source: source, target: target) ?? .cancel
             }, operationID: id)
         results[id] = result
+        if result.completedCount > 0 { model.rememberDestination(destination) }
         if let parent = followupParents[id], let old = requests[parent], case let .pasteMove(token, _, _) = old.action, pending?.token == token {
             let moved = Set(result.items.filter { $0.status == .completed }.map { $0.source.standardizedFileURL.path })
             pending?.files.removeAll { moved.contains($0.url.standardizedFileURL.path) }
@@ -246,32 +289,60 @@ import Darwin
             var followup = try followups.read(id) ?? TaskFollowupRecord(requestID: id, destination: destination)
             followup.result = result
             try followups.save(followup)
-            try update(id, status: ReceiptStatus(rawValue: result.state) ?? .needsReview, items: itemReceipts)
-            model.updateTask(decorate(presentation(result, title: title(request.action)), followup: followup))
+            let failure = conflictFailures[id]
+            let note = conflictStopNotes[id]
+            try update(id, status: failure == nil ? (ReceiptStatus(rawValue: result.state) ?? .needsReview) : .needsReview,
+                       items: itemReceipts, error: failure ?? note.map { CommandFailure(.cancelled, $0) })
+            var task = decorate(presentation(result, title: title(request.action)), followup: followup)
+            if let failure {
+                task.status = "需要核对"; task.detail = failure.message
+                task.canUndo = false; task.canRetry = false; task.canReview = true
+            } else if let note { task.detail += "；\(note)" }
+            model.updateTask(task)
         } catch {
             var task = presentation(result, title: title(request.action)); task.status = "需要核对"; task.canReview = true; task.canRetry = false; task.canUndo = false
             task.detail = "文件引擎已返回结果，但主任务记录失败；请核对后再操作。"
             model.updateTask(task); model.reportError(error)
         }
     }
-    private func resolveConflict(source: URL, target: URL) -> TransferConflictDecision {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert(); alert.messageText = "目标已存在同名项目"
-        alert.informativeText = "来源：\(source.path)\n目标：\(target.path)\n保留两份将为新项目添加编号。"
-        alert.addButton(withTitle: "保留两份"); alert.addButton(withTitle: "跳过"); alert.addButton(withTitle: "取消剩余操作")
-        switch alert.runModal() { case .alertFirstButtonReturn: return .keepBoth; case .alertSecondButtonReturn: return .skip; default: return .cancel }
+    private func resolveConflict(id: UUID, source: URL, target: URL) async -> TransferConflictDecision {
+        guard let cancellation = cancellations[id], !cancellation.isCancelled else { return .cancel }
+        if let decision = batchConflictDecisions[id] { return decision }
+        do {
+            try update(id, status: .waitingForUser)
+            waitingConflicts.insert(id)
+            var task = model.tasks.first(where: { $0.id == id }) ?? TaskPresentation(id: id, title: "文件操作", status: "等待选择")
+            task.status = "等待选择"; task.detail = "目标中已有“\(target.lastPathComponent)”，请选择处理方式。"; task.canCancel = true
+            model.updateTask(task)
+            showTasks?()
+            let response = await conflictPrompt(source, target, cancellation)
+            waitingConflicts.remove(id)
+            try update(id, status: .running)
+            task = model.tasks.first(where: { $0.id == id }) ?? task
+            task.status = "处理中"; task.detail = "正在重新核对来源和目标。"
+            model.updateTask(task)
+            if response.reason == .timedOut { conflictStopNotes[id] = "等待选择超过 15 分钟，已取消剩余操作。" }
+            if response.reason == .unavailable { conflictStopNotes[id] = "冲突窗口不可用或已关闭，已取消剩余操作。" }
+            guard !cancellation.isCancelled, response.reason == .user else { return .cancel }
+            if response.applyToRemaining && response.decision != .cancel { batchConflictDecisions[id] = response.decision }
+            return response.decision
+        } catch {
+            waitingConflicts.remove(id); cancellation.cancel()
+            conflictFailures[id] = CommandFailure(.recoveryRequired, "无法保存冲突等待状态，已停止后续操作；请核对已完成项目。")
+            model.reportError(error)
+            return .cancel
+        }
     }
     private func chooseTarget(_ explicit: URL?, context: ActionContext, infer: Bool) throws -> URL {
         if let proposed = explicit ?? (infer ? PathText.directory(for: context) : nil) {
-            var url = proposed
-            if let favorite = (model.configuration.favorites + model.configuration.watchedLocations).first(where: { $0.path == proposed.path }) { url = try favorite.resolve() }
-            guard try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else { throw CommandFailure(.invalidDestination, "目标不是有效目录") }
-            return url
+            guard try proposed.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else { throw CommandFailure(.invalidDestination, "目标不是有效目录") }
+            return proposed
         }
         NSApp.activate(ignoringOtherApps: true)
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
         panel.message = "请选择此操作的目标目录。"; panel.prompt = "选择目录"
         guard panel.runModal() == .OK, let url = panel.url else { throw CommandFailure(.cancelled, "已取消选择目标目录") }
+        model.rememberDestination(url)
         return url
     }
     private func reference(_ url: URL) -> FileReference {
@@ -283,10 +354,14 @@ import Darwin
         // must stay within configured, bookmark-resolved roots; a URL is not a grant.
         var references = request.context.selection.map(\.url)
         if case .pasteMove = request.action, let pending { references.append(contentsOf: pending.files.map(\.url)) }
-        if let container = request.context.container { references.append(container.url) }
+        if let container = request.context.container { references.append(try resolveStoredReference(container)) }
+        var requestedRecent: UUID?
         switch request.action {
         case let .createFile(_, destination, _), let .pasteMove(_, destination, _), let .transfer(_, destination, _):
-            if let destination { references.append(destination.url.resolvingSymlinksInPath()) }
+            if let destination {
+                references.append(try resolveStoredReference(destination).resolvingSymlinksInPath())
+                requestedRecent = destination.bookmarkToken
+            }
         default: break
         }
         let locations = model.configuration.watchedLocations + model.configuration.favorites
@@ -299,10 +374,16 @@ import Darwin
             succeeded = true
             return scopes
         }
+        for location in model.configuration.recentDestinations {
+            guard location.id == requestedRecent || references.contains(where: { $0.path == location.path || $0.path.hasPrefix(location.path + "/") }) else { continue }
+            let resolved = try location.resolve()
+            if resolved.startAccessingSecurityScopedResource() { scopes.append(resolved) }
+            roots.append(resolved.resolvingSymlinksInPath().standardizedFileURL)
+        }
         for location in locations {
             let isRequestedFavorite: Bool
             if case let .openFavorite(favoriteID) = request.action { isRequestedFavorite = location.id == favoriteID }
-            else { isRequestedFavorite = false }
+            else { isRequestedFavorite = location.id == requestedRecent }
             guard references.contains(where: { $0.standardizedFileURL.path == location.path || $0.standardizedFileURL.path.hasPrefix(location.path + "/") }) || isRequestedFavorite else { continue }
             let resolved = try location.resolve()
             if resolved.startAccessingSecurityScopedResource() { scopes.append(resolved) }
@@ -320,7 +401,10 @@ import Darwin
         return scopes
     }
     private func contextDirectory(_ context: ActionContext) throws -> URL? {
-        if context.selection.isEmpty { return context.container?.url }
+        if context.selection.isEmpty {
+            guard let container = context.container else { return nil }
+            return try resolveStoredReference(container)
+        }
         if context.selection.count == 1 {
             let url = context.selection[0].url
             return try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true ? url : url.deletingLastPathComponent()
@@ -330,8 +414,15 @@ import Darwin
     }
     private func targetURL(_ reference: FileReference?, context: ActionContext) throws -> URL? {
         guard let reference else { return nil }
+        if reference.bookmarkToken != nil { return try resolveStoredReference(reference) }
         if reference.kindHint == .unknown { return try contextDirectory(context) }
         return reference.url
+    }
+    private func resolveStoredReference(_ reference: FileReference) throws -> URL {
+        guard let token = reference.bookmarkToken else { return reference.url }
+        if let recent = model.configuration.recentDestinations.first(where: { $0.id == token }) { return try recent.resolve() }
+        if let saved = (model.configuration.favorites + model.configuration.watchedLocations).first(where: { $0.id == token }) { return try saved.resolve() }
+        throw CommandFailure(.bookmarkStale, "保存的目标已移除或不再可用，请重新选择目录。")
     }
     private func identity(_ url: URL) throws -> String {
         var info = stat()
@@ -466,6 +557,12 @@ import Darwin
             }
         }
         for location in model.configuration.watchedLocations + model.configuration.favorites {
+            guard urls.contains(where: { $0.path == location.path || $0.path.hasPrefix(location.path + "/") }) else { continue }
+            if let url = try? location.resolve(), url.startAccessingSecurityScopedResource() {
+                scopes.append(url); roots.append(url.resolvingSymlinksInPath().standardizedFileURL)
+            }
+        }
+        for location in model.configuration.recentDestinations {
             guard urls.contains(where: { $0.path == location.path || $0.path.hasPrefix(location.path + "/") }) else { continue }
             if let url = try? location.resolve(), url.startAccessingSecurityScopedResource() {
                 scopes.append(url); roots.append(url.resolvingSymlinksInPath().standardizedFileURL)

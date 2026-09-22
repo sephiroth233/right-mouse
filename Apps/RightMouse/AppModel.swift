@@ -63,6 +63,8 @@ struct TaskPresentation: Identifiable {
     @Published var extensionEnabled = false
     @Published var selectedFiles: [URL] = []
     @Published var destination: URL?
+    @Published var selectedRecentDestinationID: UUID?
+    @Published var recentDestinationIssues: [UUID: String] = [:]
     @Published var taskReview: TaskReviewPresentation?
     @Published var reviewError: String?
     @Published var isConfirmingReview = false
@@ -205,10 +207,85 @@ struct TaskPresentation: Identifiable {
     func chooseDestination() {
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
         panel.message = "选择新建、粘贴、复制到或移动到的目标目录。"
-        if panel.runModal() == .OK { destination = panel.url }
+        if panel.runModal() == .OK, let url = panel.url {
+            destination = url; selectedRecentDestinationID = nil
+            if rememberDestination(url) { selectedRecentDestinationID = configuration.recentDestinations.first?.id }
+        }
+    }
+    /// The caller must already hold an explicit picker selection or validated access.
+    /// A history persistence error does not change the outcome of a completed task.
+    @discardableResult func rememberDestination(_ url: URL) -> Bool {
+        guard !isReadOnly else { notice = "配置为只读，未保存最近目标。"; return false }
+        do {
+            var next = configuration
+            next.recentDestinations = try RecentDestinationHistory.remember(url, in: next.recentDestinations)
+            configuration = try configurationStore.save(next)
+            onConfigurationChanged?(configuration)
+            refreshRecentDestinations()
+            return true
+        } catch { notice = "未能保存最近目标：\(error.localizedDescription)"; return false }
+    }
+    @discardableResult func selectRecentDestination(_ id: UUID) -> Bool {
+        guard let item = configuration.recentDestinations.first(where: { $0.id == id }) else { reportError("最近目标已被移除，请重新选择目录。"); return false }
+        do {
+            let url = try item.resolve()
+            destination = url; selectedRecentDestinationID = id
+            _ = rememberDestination(url)
+            notice = "已将“\(item.name)”设为文件操作台的目标目录。"
+            return true
+        } catch {
+            recentDestinationIssues[id] = error.localizedDescription
+            reportError(error)
+            return false
+        }
+    }
+    func removeRecentDestination(_ id: UUID) {
+        if save({ $0.recentDestinations.removeAll { $0.id == id } }) {
+            recentDestinationIssues[id] = nil
+            if selectedRecentDestinationID == id { selectedRecentDestinationID = nil; destination = nil }
+        }
+    }
+    func clearRecentDestinations() {
+        if save({ $0.recentDestinations.removeAll() }) {
+            recentDestinationIssues.removeAll()
+            if selectedRecentDestinationID != nil { selectedRecentDestinationID = nil; destination = nil }
+        }
+    }
+    func repairRecentDestination(_ id: UUID) {
+        guard configuration.recentDestinations.contains(where: { $0.id == id }) else { return }
+        let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
+        panel.message = "重新选择此最近目标的目录。只有你明确选择后才会更新授权。"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        _ = repairRecentDestination(id, with: url)
+    }
+    /// Shares the accepted-picker path with fixture checks; never called with a path hint alone.
+    @discardableResult func repairRecentDestination(_ id: UUID, with url: URL) -> Bool {
+        guard configuration.recentDestinations.contains(where: { $0.id == id }) else { return false }
+        do {
+            let repaired = try RecentDestinationHistory.remember(url, in: configuration.recentDestinations, replacingID: id)
+            if save({ $0.recentDestinations = repaired }) {
+                if selectedRecentDestinationID == id { destination = try repaired.first!.resolve() }
+                refreshRecentDestinations()
+                return true
+            }
+        } catch { reportError(error) }
+        return false
+    }
+    func refreshRecentDestinations() {
+        var issues: [UUID: String] = [:]
+        for item in configuration.recentDestinations {
+            do { _ = try item.resolve() } catch { issues[item.id] = error.localizedDescription }
+        }
+        recentDestinationIssues = issues
     }
     func perform(_ action: String) {
         guard let onPerformAction else { reportError("操作服务尚未连接，请重新启动 RightMouse。"); return }
+        let requiresDestination = action.hasPrefix("createFile:") || ["createFile", "pasteMove", "copyTo", "moveTo"].contains(action)
+        if requiresDestination, let id = selectedRecentDestinationID {
+            guard let item = configuration.recentDestinations.first(where: { $0.id == id }) else { reportError("选中的最近目标已被移除，请重新选择。"); return }
+            do { destination = try item.resolve() }
+            catch { recentDestinationIssues[id] = error.localizedDescription; reportError(error); return }
+        }
         onPerformAction(action, selectedFiles, destination)
     }
     func setLaunchAtLogin(_ enabled: Bool) {
