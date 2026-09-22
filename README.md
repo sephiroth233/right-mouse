@@ -45,7 +45,7 @@ flowchart LR
 
 ## 当前验证边界
 
-105 项核心夹具检查和 16 项真实宿主集成检查通过，详情见 [核心证据](specs/001-finder-core/evidence/EV-core-checks-001.md) 与 [原生整合证据](specs/001-finder-core/evidence/EV-native-build-001.md)。宿主与嵌入扩展已实际编译，开发签名结构验证通过；Finder 登记和进程加载证据见 [接入记录](Config/validation/finder-load-2026-09-22.md)。
+119 项核心夹具检查和 59 项真实宿主集成检查通过，详情见 [后续操作与恢复证据](specs/001-finder-core/evidence/EV-followup-hardening-001.md)。宿主与嵌入扩展已实际编译，开发签名结构验证通过；Finder 登记和进程加载证据见 [接入记录](Config/validation/finder-load-2026-09-22.md)。后续系统日志已确认当前 ad-hoc 构建的 App Group 访问被拒绝，路径查找成功不代表共享通信可用。
 
 尚未完整通过：真实 Finder 菜单到宿主的端到端操作、所有权限撤回场景、真实双卷/外置卷故障、最低 macOS 版本、完整键盘与 VoiceOver 验收、Developer ID 签名及公证。当前机器没有有效分发证书，也未安装完整 Xcode。开发包不等于已公证发行版。
 

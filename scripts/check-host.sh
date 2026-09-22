@@ -17,7 +17,9 @@ xcrun swiftc "${common[@]}" \
   Apps/RightMouse/AppModel.swift \
   Apps/RightMouse/ApplicationLauncher.swift \
   Apps/RightMouse/HostController.swift \
+  Apps/RightMouse/TaskFollowupStore.swift \
   tools/RightMouseHostCheck/main.swift \
+  tools/RightMouseHostCheck/FollowupChecks.swift \
   -framework AppKit \
   -framework SwiftUI \
   -framework FinderSync \

@@ -41,13 +41,14 @@ public struct TransferUndoToken: Codable, Sendable {
 
 public struct TransferItemResult: Codable, Sendable {
     public let itemID: UUID
+    public let operationID: UUID?
     public let source: URL
     public let destination: URL?
     public let status: TransferItemStatus
     public let message: String
     public let undoToken: TransferUndoToken?
-    public init(itemID: UUID = UUID(), source: URL, destination: URL? = nil, status: TransferItemStatus, message: String, undoToken: TransferUndoToken? = nil) {
-        self.itemID = itemID; self.source = source; self.destination = destination; self.status = status; self.message = message; self.undoToken = undoToken
+    public init(itemID: UUID = UUID(), operationID: UUID? = nil, source: URL, destination: URL? = nil, status: TransferItemStatus, message: String, undoToken: TransferUndoToken? = nil) {
+        self.itemID = itemID; self.operationID = operationID; self.source = source; self.destination = destination; self.status = status; self.message = message; self.undoToken = undoToken
     }
 }
 
@@ -79,6 +80,18 @@ public struct TransferJournalRecord: Codable, Sendable {
     public var destinationIdentity: TransferFileIdentity?
     public var stagingURL: URL?
     public var result: TransferItemResult?
+}
+
+public struct TransferRecoveryIssue: Sendable {
+    public let url: URL
+    public let message: String
+    public init(url: URL, message: String) { self.url = url; self.message = message }
+}
+
+public struct TransferRecoveryScan: Sendable {
+    public let records: [TransferJournalRecord]
+    public let issues: [TransferRecoveryIssue]
+    public init(records: [TransferJournalRecord], issues: [TransferRecoveryIssue]) { self.records = records; self.issues = issues }
 }
 
 public enum TransferEngineError: Error, LocalizedError {

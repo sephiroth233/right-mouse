@@ -46,6 +46,10 @@ public enum PrivateFileIO {
         try handle.write(contentsOf: data); try handle.synchronize(); try handle.close()
         let result = replace ? rename(temporary.path, url.path) : renamex_np(temporary.path, url.path, UInt32(RENAME_EXCL))
         guard result == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        let parent = open(url.deletingLastPathComponent().path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+        guard parent >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        defer { close(parent) }
+        guard fsync(parent) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
     }
     public static func read(_ url: URL, maximumBytes: Int = RequestValidator.maximumBytes) throws -> Data {
         let fd = open(url.path, O_RDONLY | O_NOFOLLOW)

@@ -11,7 +11,7 @@ struct RightMouseHostCheck {
     @MainActor
     static func main() async {
         do {
-            let count = try await run()
+            let count = try await run() + runFollowupChecks()
             print("PASS: \(count) real HostController integration checks")
         } catch {
             fputs("FAIL host: \(error)\n", stderr)

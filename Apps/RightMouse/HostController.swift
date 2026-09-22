@@ -9,13 +9,18 @@ import Darwin
     private let ledger: CommandLedger
     private let inbox: InboxStore
     private let engine: FileTransferEngine
-    private var queue: [CommandRequest] = []
+    private let followups: TaskFollowupStore
+    private enum Work { case command(CommandRequest), undo(UUID) }
+    private var queue: [Work] = []
+    private var queuedUndos: Set<UUID> = []
     private var worker: Task<Void, Never>?
     private var cancellations: [UUID: TransferCancellation] = [:]
     private var results: [UUID: TransferResult] = [:]
     private var requests: [UUID: CommandRequest] = [:]
     private var activeIDs: Set<UUID> = []
     private var interactiveIDs: Set<UUID> = []
+    private var sessionAuthorizedIDs: Set<UUID> = []
+    private var followupParents: [UUID: UUID] = [:]
     private var pending: (token: UUID, files: [FileReference], identities: [UUID: String], expires: Date)?
     private let moveType = NSPasteboard.PasteboardType("cn.rightmouse.pending-move")
     var showTasks: (() -> Void)?
@@ -26,11 +31,12 @@ import Darwin
         ledger = try CommandLedger(directory: paths.operationsDirectory.appendingPathComponent("Commands"))
         inbox = InboxStore(directory: paths.inboxDirectory)
         engine = FileTransferEngine(journalDirectory: paths.operationsDirectory.appendingPathComponent("Transfers"))
+        followups = TaskFollowupStore(directory: paths.operationsDirectory.appendingPathComponent("Followups"))
         if paths.isDevelopmentFallback { model.notice = "开发模式：应用操作可用，Finder 共享容器与签名仍需验证。" }
         model.onPerformAction = { [weak self] action, files, target in self?.perform(action, files: files, destination: target) }
         model.onConfigurationChanged = { _ in DistributedNotificationCenter.default().postNotificationName(Notification.Name("cn.rightmouse.configurationChanged"), object: nil, deliverImmediately: true) }
         model.onCancelTask = { [weak self] id in self?.cancellations[id]?.cancel() }
-        model.onUndoTask = { [weak self] id in Task { await self?.undo(id) } }
+        model.onUndoTask = { [weak self] id in self?.enqueueUndo(id) }
         model.onRetryTask = { [weak self] id in self?.retry(id) }
         model.onReviewTask = { [weak self] id in self?.review(id) }
         model.onConfirmReviewTask = { [weak self] id in
@@ -51,7 +57,7 @@ import Darwin
         do { submit(try inbox.request(id)) }
         catch { model.reportError(error) }
     }
-    func submit(_ request: CommandRequest, interactive: Bool = false) {
+    @discardableResult func submit(_ request: CommandRequest, interactive: Bool = false) -> Bool {
         do {
             _ = try RequestValidator.decode(WireCodec.encoder().encode(request))
             let accepted = try ledger.accept(request)
@@ -65,25 +71,28 @@ import Darwin
                 }
                 publishBestEffort(receipt)
                 if receipt.status == .needsReview { showTasks?() }
-                return
+                return true
             }
             activeIDs.insert(request.requestID)
-            if interactive { interactiveIDs.insert(request.requestID) }
+            if interactive { interactiveIDs.insert(request.requestID); sessionAuthorizedIDs.insert(request.requestID) }
             publishBestEffort(accepted.entry.receipt)
             if request.action.changesFiles {
                 cancellations[request.requestID] = TransferCancellation()
                 model.updateTask(TaskPresentation(id: request.requestID, title: title(request.action), status: "等待处理", total: max(1, request.context.selection.count), canCancel: true))
-                queue.append(request)
+                queue.append(.command(request))
                 startWorker()
             } else { Task { await self.execute(request) } }
-        } catch { model.reportError(error) }
+            return true
+        } catch { model.reportError(error); return false }
     }
     private func startWorker() {
         guard worker == nil else { return }
         worker = Task {
             while !queue.isEmpty {
-                let request = queue.removeFirst()
-                await execute(request)
+                switch queue.removeFirst() {
+                case .command(let request): await execute(request)
+                case .undo(let id): await undo(id)
+                }
             }
             worker = nil
         }
@@ -114,11 +123,17 @@ import Darwin
         let id = request.requestID
         var scopes: [URL] = []
         var effectStarted = false
-        defer { for url in scopes { url.stopAccessingSecurityScopedResource() }; cancellations[id] = nil; activeIDs.remove(id); interactiveIDs.remove(id) }
+        defer { for url in scopes { url.stopAccessingSecurityScopedResource() }; cancellations[id] = nil; activeIDs.remove(id); interactiveIDs.remove(id); followupParents[id] = nil }
         do {
             if cancellations[id]?.isCancelled == true { throw CommandFailure(.cancelled, "已取消尚未开始的任务") }
             try update(id, status: .planning)
-            scopes = try resolveAccess(for: request, interactive: interactiveIDs.contains(id))
+            if let parent = followupParents[id], let followup = try verifiedFollowup(parent) {
+                scopes = try acquireFollowupAccess(id: parent, record: followup, urls: request.context.selection.map(\.url) + [followup.destination].compactMap { $0 })
+                try validateRetryIdentities(parent: parent, record: followup)
+                if sessionAuthorizedIDs.contains(parent) { sessionAuthorizedIDs.insert(id) }
+            } else {
+                scopes = try resolveAccess(for: request, interactive: interactiveIDs.contains(id))
+            }
             var items: [ItemReceipt] = []
             switch request.action {
             case let .copyText(format):
@@ -143,7 +158,7 @@ import Darwin
                 if model.configuration.revealCreatedFile { NSWorkspace.shared.activateFileViewerSelecting([created]) }
             case let .transfer(mode, destination, policy):
                 let target = try chooseTarget(destination?.url, context: request.context, infer: false)
-                await transfer(request, sources: request.context.selection.map(\.url), destination: target, mode: mode, policy: policy)
+                await transfer(request, sources: request.context.selection.map(\.url), destination: target, mode: mode, policy: policy, grantedScopes: scopes)
                 return
             case let .pasteMove(token, destination, policy):
                 guard let state = validPending(), state.token == token else { throw CommandFailure(.requestExpired, "剪切列表已失效，请重新选择文件并剪切") }
@@ -151,7 +166,7 @@ import Darwin
                     guard try identity(file.url) == state.identities[file.refID] else { throw CommandFailure(.sourceChanged, "剪切后的来源已改变，请重新选择") }
                 }
                 let target = try chooseTarget(try targetURL(destination, context: request.context), context: request.context, infer: false)
-                await transfer(request, sources: state.files.map(\.url), destination: target, mode: .move, policy: policy)
+                await transfer(request, sources: state.files.map(\.url), destination: target, mode: .move, policy: policy, grantedScopes: scopes)
                 if let result = results[id], pending?.token == token {
                     let done = Set(result.items.filter { $0.status == .completed }.map { $0.source.standardizedFileURL.path })
                     pending?.files.removeAll { done.contains($0.url.standardizedFileURL.path) }
@@ -184,33 +199,55 @@ import Darwin
         }
     }
 
-    private func transfer(_ request: CommandRequest, sources: [URL], destination: URL, mode: CommandTransferMode, policy: ConflictPolicy) async {
+    private func transfer(_ request: CommandRequest, sources: [URL], destination: URL, mode: CommandTransferMode, policy: ConflictPolicy, grantedScopes: [URL]) async {
         let id = request.requestID
         let cancellation = cancellations[id] ?? TransferCancellation()
         cancellations[id] = cancellation
-        do { try update(id, status: .running) }
-        catch { model.reportError(error); return }
+        do {
+            var record = TaskFollowupRecord(requestID: id, destination: destination)
+            record.destinationIdentity = try identity(destination.resolvingSymlinksInPath())
+            record.accessBookmarks = (grantedScopes + sources + sources.map { $0.deletingLastPathComponent() } + [destination]).compactMap {
+                try? $0.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+            }
+            try followups.save(record)
+            try update(id, status: .running)
+        } catch {
+            model.updateTask(TaskPresentation(id: id, title: title(request.action), status: "需要核对", detail: "无法保存执行计划，未开始文件操作。", canReview: true))
+            model.reportError(error); return
+        }
         showTasks?()
         let result = await engine.transfer(sources: sources, to: destination, mode: mode == .copy ? .copy : .move,
             conflictPolicy: TransferConflictPolicy(rawValue: policy.rawValue) ?? .ask, cancellation: cancellation,
             onProgress: { [weak self] progress in
                 Task { @MainActor in
-                    guard let self else { return }
+                    guard let self, self.activeIDs.contains(id), self.results[id] == nil else { return }
                     self.model.updateTask(TaskPresentation(id: id, title: self.title(request.action), status: "处理中", detail: self.phaseTitle(progress.phase), completed: progress.completedItems, total: progress.totalItems, canCancel: true))
                 }
             }, resolveConflict: { [weak self] source, target in
                 await self?.resolveConflict(source: source, target: target) ?? .cancel
             }, operationID: id)
         results[id] = result
+        if let parent = followupParents[id], let old = requests[parent], case let .pasteMove(token, _, _) = old.action, pending?.token == token {
+            let moved = Set(result.items.filter { $0.status == .completed }.map { $0.source.standardizedFileURL.path })
+            pending?.files.removeAll { moved.contains($0.url.standardizedFileURL.path) }
+            if pending?.files.isEmpty == true { invalidatePending() }
+            else {
+                do { try writePending() }
+                catch { model.notice = "重试结果已保留，但剪切列表快照未更新；请重新剪切剩余项目。" }
+            }
+        }
         let itemReceipts = result.items.map { item in
             ItemReceipt(itemID: item.itemID, status: item.status == .completed ? "success" : item.status.rawValue, destinationURL: item.destination,
                         error: item.status == .failed ? CommandFailure(.ioFailed, item.message) : (item.status == .sourceRetained ? CommandFailure(.sourceRetained, item.message) : nil))
         }
         do {
+            var followup = try followups.read(id) ?? TaskFollowupRecord(requestID: id, destination: destination)
+            followup.result = result
+            try followups.save(followup)
             try update(id, status: ReceiptStatus(rawValue: result.state) ?? .needsReview, items: itemReceipts)
-            model.updateTask(presentation(result, title: title(request.action)))
+            model.updateTask(decorate(presentation(result, title: title(request.action)), followup: followup))
         } catch {
-            var task = presentation(result, title: title(request.action)); task.status = "需要核对"; task.canReview = true; task.canRetry = false
+            var task = presentation(result, title: title(request.action)); task.status = "需要核对"; task.canReview = true; task.canRetry = false; task.canUndo = false
             task.detail = "文件引擎已返回结果，但主任务记录失败；请核对后再操作。"
             model.updateTask(task); model.reportError(error)
         }
@@ -338,7 +375,17 @@ import Darwin
                     try ledger.save(entry); publishBestEffort(entry.receipt)
                 }
                 if entry.request.action.changesFiles && (index < 100 || entry.receipt.status == .needsReview) {
-                    model.updateTask(TaskPresentation(id: entry.request.requestID, title: title(entry.request.action), status: entry.receipt.status == .needsReview ? "需要核对" : stateTitle(entry.receipt.status.rawValue), detail: entry.receipt.error?.message ?? "历史任务", total: entry.receipt.itemResults.count, items: entry.receipt.itemResults.map { TaskItemPresentation(name: $0.destinationURL?.lastPathComponent ?? "项目", status: stateTitle($0.status), detail: $0.error?.message ?? "", destination: $0.destinationURL) }, canReview: true))
+                    var task = TaskPresentation(id: entry.request.requestID, title: title(entry.request.action), status: entry.receipt.status == .needsReview ? "需要核对" : stateTitle(entry.receipt.status.rawValue), detail: entry.receipt.error?.message ?? "历史任务", total: entry.receipt.itemResults.count, items: entry.receipt.itemResults.map { TaskItemPresentation(name: $0.destinationURL?.lastPathComponent ?? "项目", status: stateTitle($0.status), detail: $0.error?.message ?? "", destination: $0.destinationURL) }, canReview: true)
+                    do {
+                        if entry.receipt.status != .needsReview, let followup = try verifiedFollowup(entry.request.requestID), let result = followup.result {
+                            results[result.operationID] = result
+                            task = decorate(presentation(result, title: title(entry.request.action)), followup: followup)
+                            task.canReview = true
+                        }
+                    } catch {
+                        task.status = "需要核对"; task.detail = error.localizedDescription
+                    }
+                    model.updateTask(task)
                 }
             }
         } catch { model.reportError("读取操作记录失败，已保留现场：\(error.localizedDescription)") }
@@ -346,25 +393,198 @@ import Darwin
     private func presentation(_ result: TransferResult, title: String) -> TaskPresentation {
         TaskPresentation(id: result.operationID, title: title, status: stateTitle(result.state), detail: "完成 \(result.completedCount) / \(result.items.count) 项", completed: result.completedCount, total: result.items.count, items: result.items.map { TaskItemPresentation(name: $0.source.lastPathComponent, status: stateTitle($0.status.rawValue), detail: $0.message, destination: $0.destination) }, canUndo: result.items.contains { $0.undoToken != nil }, canRetry: result.items.contains { $0.status == .failed }, canReview: result.items.contains { $0.status == .needsReview || $0.status == .sourceRetained })
     }
-    private func undo(_ id: UUID) async {
-        guard let result = results[id] else { return }
+    private func verifiedFollowup(_ id: UUID) throws -> TaskFollowupRecord? {
+        guard let followup = try followups.read(id) else { return nil }
+        guard let entry = try ledger.entry(id), let result = followup.result,
+              [.completed,.partial,.failed,.cancelled].contains(entry.receipt.status),
+              entry.receipt.status.rawValue == result.state,
+              Set(entry.receipt.itemResults.map(\.itemID)) == Set(result.items.map(\.itemID)),
+              entry.receipt.itemResults.count == result.items.count else {
+            throw CommandFailure(.recoveryRequired, "原任务与后续操作记录不完整或不一致，请先核对")
+        }
+        for item in result.items {
+            guard let receipt = entry.receipt.itemResults.first(where: { $0.itemID == item.itemID }),
+                  receipt.destinationURL == item.destination,
+                  receipt.status == (item.status == .completed ? "success" : item.status.rawValue) else {
+                throw CommandFailure(.recoveryRequired, "项目回执与后续操作记录不一致")
+            }
+            switch entry.request.action {
+            case .transfer:
+                guard entry.request.context.selection.contains(where: { canonicalItemURL($0.url) == canonicalItemURL(item.source) }) else {
+                    throw CommandFailure(.recoveryRequired, "后续操作来源不属于原请求")
+                }
+            case .pasteMove(let token, _, _):
+                let knownPending = pending?.token == token && pending?.files.contains(where: { canonicalItemURL($0.url) == canonicalItemURL(item.source) }) == true
+                if !knownPending {
+                    let path = paths.operationsDirectory.appendingPathComponent("Transfers").appendingPathComponent(item.itemID.uuidString + ".json")
+                    let journal = try JSONDecoder().decode(TransferJournalRecord.self, from: PrivateFileIO.read(path))
+                    guard journal.schemaVersion == 1, journal.operationID == id, journal.itemID == item.itemID, journal.source == item.source else {
+                        throw CommandFailure(.recoveryRequired, "粘贴来源与传输记录不一致")
+                    }
+                }
+            default: throw CommandFailure(.recoveryRequired, "原操作不支持此后续动作")
+            }
+        }
+        return followup
+    }
+    private func canonicalItemURL(_ url: URL) -> URL {
+        url.deletingLastPathComponent().resolvingSymlinksInPath().appendingPathComponent(url.lastPathComponent).standardizedFileURL
+    }
+    private func validateRetryIdentities(parent: UUID, record: TaskFollowupRecord) throws {
+        guard let destination = record.destination, let expectedTarget = record.destinationIdentity,
+              try identity(destination.resolvingSymlinksInPath()) == expectedTarget else {
+            throw CommandFailure(.sourceChanged, "原目标目录已变化或缺少身份记录，请重新选择目标后发起操作。")
+        }
+        for item in record.result?.items.filter({ $0.status == .failed }) ?? [] {
+            let path = paths.operationsDirectory.appendingPathComponent("Transfers").appendingPathComponent(item.itemID.uuidString + ".json")
+            guard let data = try? PrivateFileIO.read(path), let journal = try? JSONDecoder().decode(TransferJournalRecord.self, from: data),
+                  journal.schemaVersion == 1, journal.operationID == parent, journal.itemID == item.itemID,
+                  journal.source == item.source, let expected = journal.sourceIdentity else {
+                throw CommandFailure(.sourceChanged, "无法确认原失败来源的身份，请重新选择文件后发起操作。")
+            }
+            var info = stat()
+            // Permission repair may change ctime; the inode, file kind, size and
+            // modification time must still identify the originally failed object.
+            guard lstat(item.source.path, &info) == 0, UInt64(info.st_dev) == expected.device,
+                  UInt64(info.st_ino) == expected.inode, UInt32(info.st_mode & S_IFMT) == expected.kind,
+                  info.st_size == expected.size, Int64(info.st_mtimespec.tv_sec) == expected.modifiedSeconds,
+                  Int64(info.st_mtimespec.tv_nsec) == expected.modifiedNanoseconds else {
+                throw CommandFailure(.sourceChanged, "失败来源已被替换或修改，请重新选择文件后发起操作。")
+            }
+        }
+    }
+    private func acquireFollowupAccess(id: UUID, record: TaskFollowupRecord, urls: [URL]) throws -> [URL] {
+        var scopes: [URL] = [], roots: [URL] = []
+        var succeeded = false
+        defer { if !succeeded { scopes.forEach { $0.stopAccessingSecurityScopedResource() } } }
+        for bookmark in record.accessBookmarks {
+            var stale = false
+            if let url = try? URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope,.withoutUI], relativeTo: nil, bookmarkDataIsStale: &stale), !stale, url.startAccessingSecurityScopedResource() {
+                scopes.append(url); roots.append(url.resolvingSymlinksInPath().standardizedFileURL)
+            }
+        }
+        for location in model.configuration.watchedLocations + model.configuration.favorites {
+            guard urls.contains(where: { $0.path == location.path || $0.path.hasPrefix(location.path + "/") }) else { continue }
+            if let url = try? location.resolve(), url.startAccessingSecurityScopedResource() {
+                scopes.append(url); roots.append(url.resolvingSymlinksInPath().standardizedFileURL)
+            }
+        }
+        if sessionAuthorizedIDs.contains(id) {
+            // Only a request from this process's picker may retain its original session grant.
+            // Finder and restored requests cannot enter this branch based on a persisted flag.
+            for url in urls where url.startAccessingSecurityScopedResource() { scopes.append(url) }
+        } else {
+            for url in urls {
+                let canonical = url.deletingLastPathComponent().resolvingSymlinksInPath().appendingPathComponent(url.lastPathComponent).standardizedFileURL.path
+                guard roots.contains(where: { canonical == $0.path || canonical.hasPrefix($0.path + "/") }) else {
+                    throw CommandFailure(.accessDenied, "后续操作的位置缺少有效授权，请在权限与诊断中重新选择来源和目标目录。")
+                }
+            }
+        }
+        succeeded = true
+        return scopes
+    }
+    private func decorate(_ original: TaskPresentation, followup: TaskFollowupRecord) -> TaskPresentation {
+        var task = original
+        if let retryID = followup.retryRequestID {
+            task.canRetry = false
+            task.detail += "；重试任务：\(retryID.uuidString)"
+        }
+        if followup.requiresReview {
+            task.status = "需要核对"; task.detail = "撤销留下了未确认的执行记录，不会自动重做。请核对来源和目标。"
+            task.canUndo = false; task.canRetry = false; task.canReview = true
+        } else if !followup.undoCompleted.isEmpty, let result = followup.result {
+            let available = Set(result.items.filter { $0.undoToken != nil }.map(\.itemID))
+            task.status = available.isSubset(of: followup.undoCompleted) ? "已撤销" : "部分撤销"
+            task.detail = "已撤销 \(followup.undoCompleted.count) 项移动；原任务结果保留。"
+            task.canUndo = !available.subtracting(followup.undoCompleted).isEmpty
+            task.items = result.items.map { item in
+                let undone = followup.undoCompleted.contains(item.itemID)
+                return TaskItemPresentation(id: item.itemID, name: item.source.lastPathComponent, status: undone ? "已撤销" : stateTitle(item.status.rawValue), detail: undone ? "已移回原位置" : item.message, destination: undone ? item.source : item.destination, source: item.source)
+            }
+        }
+        return task
+    }
+    private func enqueueUndo(_ id: UUID) {
+        guard !queuedUndos.contains(id), let result = results[id] else { return }
         do {
-            for token in result.items.compactMap(\.undoToken) { try await engine.undo(token) }
-            var task = presentation(result, title: "已撤销移动"); task.status = "已撤销"; task.canUndo = false; model.updateTask(task)
+            guard let followup = try verifiedFollowup(id), !followup.requiresReview,
+                  result.items.contains(where: { $0.undoToken != nil && !followup.undoStarted.contains($0.itemID) }) else { return }
+            queuedUndos.insert(id)
+            var task = decorate(presentation(result, title: "等待撤销移动"), followup: followup)
+            task.status = "等待撤销"; task.canUndo = false; task.canRetry = false
+            model.updateTask(task)
+            queue.append(.undo(id)); startWorker()
         } catch { model.reportError(error) }
     }
+    private func undo(_ id: UUID) async {
+        defer { queuedUndos.remove(id) }
+        guard let result = results[id] else { return }
+        do {
+            guard var followup = try verifiedFollowup(id), !followup.requiresReview else { throw CommandFailure(.recoveryRequired, "撤销状态不明确，请核对任务") }
+            for item in result.items where !followup.undoCompleted.contains(item.itemID) {
+                guard let token = item.undoToken else { continue }
+                let scopes = try acquireFollowupAccess(id: id, record: followup, urls: [token.originalURL, token.currentURL])
+                defer { scopes.forEach { $0.stopAccessingSecurityScopedResource() } }
+                let scan = try await engine.scanRecoveryRecords()
+                guard let journal = scan.records.first(where: { $0.operationID == id && $0.itemID == item.itemID }),
+                      journal.source == token.originalURL, journal.destination == token.currentURL,
+                      journal.destinationIdentity == token.identity,
+                      journal.result?.undoToken?.contentFingerprint == token.contentFingerprint else {
+                    throw CommandFailure(.recoveryRequired, "撤销凭据与文件操作记录不一致，请核对任务")
+                }
+                // Save the intent before the engine can mutate a file. Never replay an ambiguous item.
+                followup.undoStarted.insert(item.itemID); try followups.save(followup)
+                try await engine.undo(token, operationID: id)
+                followup.undoCompleted.insert(item.itemID); try followups.save(followup)
+            }
+            model.updateTask(decorate(presentation(result, title: "撤销移动"), followup: followup))
+        } catch {
+            var task = presentation(result, title: "撤销移动")
+            if let saved = try? verifiedFollowup(id), !saved.requiresReview {
+                task = decorate(task, followup: saved)
+                task.detail += "；未开始下一项撤销：\(error.localizedDescription)"
+                task.canReview = true
+            } else {
+                task.status = "需要核对"; task.detail = "撤销未完整确认：\(error.localizedDescription)"; task.canUndo = false; task.canRetry = false; task.canReview = true
+            }
+            model.updateTask(task); model.reportError(error)
+        }
+    }
     private func retry(_ id: UUID) {
-        guard let result = results[id], let old = requests[id], case let .transfer(mode,destination,policy) = old.action else { model.reportError("请重新选择未完成的文件，再发起操作。"); return }
-        let failed = result.items.filter { $0.status == .failed }.map { reference($0.source) }
-        guard !failed.isEmpty else { return }
-        let context = ActionContext(entryPoint: .items, container: old.context.container, selection: failed)
-        submit(CommandRequest(context: context, action: .transfer(mode: mode, destination: destination, conflictPolicy: policy)), interactive: true)
+        guard !queuedUndos.contains(id), let result = results[id], let old = requests[id] else { return }
+        do {
+            guard var followup = try verifiedFollowup(id), !followup.requiresReview, followup.retryRequestID == nil else { return }
+            let mode: CommandTransferMode, policy: ConflictPolicy
+            switch old.action {
+            case .transfer(let value, _, let conflict): mode = value; policy = conflict
+            case .pasteMove(_, _, let conflict): mode = .move; policy = conflict
+            default: return
+            }
+            let failed = result.items.filter { $0.status == .failed }.map { reference($0.source) }
+            guard !failed.isEmpty, let destination = followup.destination else { return }
+            let context = ActionContext(entryPoint: .items, container: nil, selection: failed)
+            let request = CommandRequest(context: context, action: .transfer(mode: mode, destination: reference(destination), conflictPolicy: policy))
+            let scopes = try acquireFollowupAccess(id: id, record: followup, urls: failed.map(\.url) + [destination])
+            defer { scopes.forEach { $0.stopAccessingSecurityScopedResource() } }
+            try validateRetryIdentities(parent: id, record: followup)
+            followupParents[request.requestID] = id
+            guard submit(request) else { followupParents[request.requestID] = nil; return }
+            // submit and this write run without suspension on MainActor. On write
+            // failure, cancel the queued child before its first file side effect.
+            followup.retryRequestID = request.requestID
+            do { try followups.save(followup) }
+            catch { cancellations[request.requestID]?.cancel(); throw error }
+            model.updateTask(decorate(presentation(result, title: title(old.action)), followup: followup))
+        } catch { model.reportError(error) }
     }
     private func review(_ id: UUID) {
         Task {
             do {
                 guard let entry = try ledger.entry(id) else { throw CommandFailure(.recoveryRequired, "操作记录缺失") }
-                let records = try await engine.recoveryRecords().filter { $0.operationID == id }
+                let scan = try await engine.scanRecoveryRecords()
+                let records = scan.records.filter { $0.operationID == id }
+                if !scan.issues.isEmpty { model.notice = "有 \(scan.issues.count) 条文件记录损坏或不兼容，已保留；其余记录仍可核对。" }
                 var items: [TaskReviewItemPresentation] = []
                 for record in records {
                     let assessment = await engine.recoveryAssessment(record)
@@ -382,7 +602,9 @@ import Darwin
                 }
                 let confirmationURL = paths.operationsDirectory.appendingPathComponent("Reviews").appendingPathComponent(id.uuidString + ".json")
                 let confirmation = (try? PrivateFileIO.read(confirmationURL, maximumBytes: 4096)).flatMap { try? WireCodec.decoder().decode(ReviewConfirmation.self, from: $0) }
-                model.showReview(TaskReviewPresentation(id: id, title: title(entry.request.action), status: stateTitle(entry.receipt.status.rawValue), summary: entry.receipt.error?.message ?? "检查来源与目标。确认仅记录人工核对，不改变原始操作结果。", items: items, canConfirm: !items.isEmpty, previouslyConfirmedAt: confirmation?.confirmedAt))
+                let followup = try followups.read(id)
+                let summary = followup?.requiresReview == true ? "撤销曾开始但没有完整结果。请检查原位置与移动目标；不会自动重做撤销。" : (entry.receipt.error?.message ?? "检查来源与目标。确认仅记录人工核对，不改变原始操作结果。")
+                model.showReview(TaskReviewPresentation(id: id, title: title(entry.request.action), status: followup?.requiresReview == true ? "需要核对" : stateTitle(entry.receipt.status.rawValue), summary: summary, items: items, canConfirm: !items.isEmpty, previouslyConfirmedAt: confirmation?.confirmedAt))
                 showTasks?()
             } catch { model.reviewError = error.localizedDescription; model.reportError(error) }
         }

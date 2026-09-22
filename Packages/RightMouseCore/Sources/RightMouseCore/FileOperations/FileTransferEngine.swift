@@ -22,7 +22,7 @@ public actor FileTransferEngine {
                          resolveConflict: (@Sendable (URL, URL) async -> TransferConflictDecision)? = nil,
                          operationID: UUID = UUID()) async -> TransferResult {
         guard !running else {
-            return TransferResult(operationID: operationID, items: sources.map { .init(source: $0, status: .failed, message: "另一个文件操作正在进行，请稍后重试。") })
+            return TransferResult(operationID: operationID, items: sources.map { .init(operationID: operationID, source: $0, status: .failed, message: "另一个文件操作正在进行，请稍后重试。") })
         }
         running = true
         journalFailed = false
@@ -32,7 +32,7 @@ public actor FileTransferEngine {
         do {
             guard !sources.isEmpty, sources.count <= 1024, target.isFileURL,
                   try TransferFileSystem.identity(destinationDirectory).kind == S_IFDIR else { throw TransferEngineError.invalidTarget }
-            try FileManager.default.createDirectory(at: journalDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            try PrivateFileIO.ensureDirectory(journalDirectory)
             for rawSource in sources {
                 if !rawSource.isFileURL {
                     results.append(.init(source: rawSource, status: .failed, message: TransferEngineError.invalidSource.localizedDescription))
@@ -45,7 +45,7 @@ public actor FileTransferEngine {
                 onProgress?(TransferProgress(operationID: operationID, completedItems: results.count, totalItems: sources.count, phase: result.status.rawValue, bytesProcessed: 0))
             }
         } catch {
-            results = sources.map { .init(source: $0, status: .failed, message: error.localizedDescription) }
+            results = sources.map { .init(operationID: operationID, source: $0, status: .failed, message: error.localizedDescription) }
         }
         return TransferResult(operationID: operationID, items: results)
     }
@@ -71,7 +71,7 @@ public actor FileTransferEngine {
             let identity = try TransferFileSystem.identity(source)
             guard [UInt32(S_IFREG), UInt32(S_IFDIR), UInt32(S_IFLNK)].contains(identity.kind) else { throw TransferEngineError.unsupportedFile }
             if source == destination {
-                return .init(itemID: record.itemID, source: source, destination: destination, status: .skipped, message: "来源与目标相同，未做更改。")
+                return .init(itemID: record.itemID, operationID: operationID, source: source, destination: destination, status: .skipped, message: "来源与目标相同，未做更改。")
             }
             if identity.kind == S_IFDIR && (target.path == source.path || target.path.hasPrefix(source.path + "/")) { throw TransferEngineError.descendantTarget }
             record.sourceIdentity = identity
@@ -79,7 +79,7 @@ public actor FileTransferEngine {
             if TransferFileSystem.exists(destination) {
                 let decision = await decide(policy: policy, source: source, destination: destination, resolve: resolveConflict)
                 switch decision {
-                case .skip: return try finish(&record, .init(itemID: record.itemID, source: source, destination: destination, status: .skipped, message: "目标同名，已跳过。"))
+                case .skip: return try finish(&record, .init(itemID: record.itemID, operationID: operationID, source: source, destination: destination, status: .skipped, message: "目标同名，已跳过。"))
                 case .cancel: cancellation.cancel(); throw TransferEngineError.cancelled
                 case .keepBoth: destination = nextCandidate(source.lastPathComponent, in: target); record.destination = destination
                 }
@@ -128,7 +128,7 @@ public actor FileTransferEngine {
                     switch decision {
                     case .skip:
                         try cleanStaging(stagingContainer)
-                        return try finish(&record, .init(itemID: record.itemID, source: source, destination: destination, status: .skipped, message: "提交时目标被占用，已跳过。"))
+                        return try finish(&record, .init(itemID: record.itemID, operationID: operationID, source: source, destination: destination, status: .skipped, message: "提交时目标被占用，已跳过。"))
                     case .cancel: cancellation.cancel(); throw TransferEngineError.cancelled
                     case .keepBoth: destination = nextCandidate(source.lastPathComponent, in: target)
                     }
@@ -152,7 +152,7 @@ public actor FileTransferEngine {
             }
             try cleanStaging(stagingContainer)
             let undo = mode == .move && sameVolume ? TransferUndoToken(originalURL: source, currentURL: destination, identity: try TransferFileSystem.identity(destination), contentFingerprint: try TransferFileSystem.fingerprint(TransferFileSystem.manifest(destination, cancellation: TransferCancellation()))) : nil
-            return try finish(&record, .init(itemID: record.itemID, source: source, destination: destination, status: .completed, message: mode == .move ? "移动完成。" : "复制完成。", undoToken: undo))
+            return try finish(&record, .init(itemID: record.itemID, operationID: operationID, source: source, destination: destination, status: .completed, message: mode == .move ? "移动完成。" : "复制完成。", undoToken: undo))
         } catch {
             let status: TransferItemStatus
             if committed {
@@ -161,10 +161,10 @@ public actor FileTransferEngine {
             else { status = .failed }
             // Pre-commit staging is private to this item. Retain it whenever cleanup cannot be verified.
             if !committed { try? cleanStaging(stagingContainer) }
-            let result = TransferItemResult(itemID: record.itemID, source: source, destination: committed ? destination : nil, status: status,
+            let result = TransferItemResult(itemID: record.itemID, operationID: operationID, source: source, destination: committed ? destination : nil, status: status,
                                             message: committed ? "目标已提交；\(error.localizedDescription) 请核对操作记录。" : error.localizedDescription)
             do { return try finish(&record, result) }
-            catch { return .init(itemID: record.itemID, source: source, destination: committed ? destination : nil, status: committed ? .needsReview : .failed, message: "操作记录写入失败，停止后续副作用。请核对来源和目标。") }
+            catch { return .init(itemID: record.itemID, operationID: operationID, source: source, destination: committed ? destination : nil, status: committed ? .needsReview : .failed, message: "操作记录写入失败，停止后续副作用。请核对来源和目标。") }
         }
     }
 
@@ -211,35 +211,53 @@ public actor FileTransferEngine {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let data = try encoder.encode(record)
         let file = journalDirectory.appendingPathComponent(record.itemID.uuidString + ".json")
-        let temporary = journalDirectory.appendingPathComponent(".\(UUID().uuidString).tmp")
-        let fd = open(temporary.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
-        guard fd >= 0 else { throw TransferEngineError.system(errno) }
-        defer { close(fd); unlink(temporary.path) }
-        try data.withUnsafeBytes { raw in
-            var offset = 0
-            while offset < raw.count {
-                let amount = write(fd, raw.baseAddress!.advanced(by: offset), raw.count - offset)
-                guard amount > 0 else { throw TransferEngineError.system(errno) }
-                offset += amount
-            }
-        }
-        guard fsync(fd) == 0, rename(temporary.path, file.path) == 0 else { throw TransferEngineError.system(errno) }
-        let directoryFD = open(journalDirectory.path, O_RDONLY | O_DIRECTORY)
-        if directoryFD >= 0 { defer { close(directoryFD) }; guard fsync(directoryFD) == 0 else { throw TransferEngineError.system(errno) } }
+        try PrivateFileIO.ensureDirectory(journalDirectory)
+        try PrivateFileIO.write(data, to: file)
+        let directoryFD = open(journalDirectory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+        guard directoryFD >= 0 else { throw TransferEngineError.system(errno) }
+        defer { close(directoryFD) }
+        guard fsync(directoryFD) == 0 else { throw TransferEngineError.system(errno) }
     }
 
     private func finish(_ record: inout TransferJournalRecord, _ result: TransferItemResult) throws -> TransferItemResult {
         record.phase = result.status.rawValue; record.result = result; try save(record); return result
     }
 
+    /// Compatibility API: malformed records are omitted. Use scanRecoveryRecords()
+    /// whenever callers need to surface isolated recovery issues.
     public func recoveryRecords() throws -> [TransferJournalRecord] {
-        guard FileManager.default.fileExists(atPath: journalDirectory.path) else { return [] }
-        return try FileManager.default.contentsOfDirectory(at: journalDirectory, includingPropertiesForKeys: nil)
-            .filter { $0.pathExtension == "json" }.map { url in
-                let record = try JSONDecoder().decode(TransferJournalRecord.self, from: Data(contentsOf: url))
-                guard record.schemaVersion == 1 else { throw TransferEngineError.journalVersion }
-                return record
-            }
+        try scanRecoveryRecords().records
+    }
+
+    public func scanRecoveryRecords() throws -> TransferRecoveryScan {
+        guard FileManager.default.fileExists(atPath: journalDirectory.path) else { return TransferRecoveryScan(records: [], issues: []) }
+        try PrivateFileIO.ensureDirectory(journalDirectory)
+        var records: [TransferJournalRecord] = [], issues: [TransferRecoveryIssue] = []
+        for url in try FileManager.default.contentsOfDirectory(at: journalDirectory, includingPropertiesForKeys: nil)
+            .filter({ $0.pathExtension == "json" }) {
+            do { records.append(try validatedRecoveryRecord(at: url)) }
+            catch { issues.append(TransferRecoveryIssue(url: url, message: error.localizedDescription)) }
+        }
+        return TransferRecoveryScan(records: records, issues: issues)
+    }
+
+    private func validatedRecoveryRecord(at url: URL) throws -> TransferJournalRecord {
+        guard let fileID = UUID(uuidString: url.deletingPathExtension().lastPathComponent) else { throw TransferEngineError.journalVersion }
+        let record = try JSONDecoder().decode(TransferJournalRecord.self, from: PrivateFileIO.read(url, maximumBytes: RequestValidator.maximumBytes))
+        guard record.schemaVersion == 1, record.itemID == fileID else { throw TransferEngineError.journalVersion }
+        try validateLocal(record.source); try validateLocal(record.destination)
+        if let staging = record.stagingURL { try validateLocal(staging) }
+        if let result = record.result {
+            guard result.itemID == record.itemID, result.operationID == nil || result.operationID == record.operationID else { throw TransferEngineError.journalVersion }
+            try validateLocal(result.source)
+            if let destination = result.destination { try validateLocal(destination) }
+            if let undo = result.undoToken { try validateLocal(undo.originalURL); try validateLocal(undo.currentURL) }
+        }
+        return record
+    }
+
+    private func validateLocal(_ url: URL) throws {
+        guard url.isFileURL, (url.host ?? "").isEmpty, url.query == nil, url.fragment == nil, !url.path.contains("\0") else { throw TransferEngineError.invalidSource }
     }
 
     /// Recovery never replays mutations. A nonterminal record is returned for explicit user review.
@@ -253,12 +271,12 @@ public actor FileTransferEngine {
         return "证据不足或文件身份已变化；请核对来源、目标与暂存位置。"
     }
 
-    public func undo(_ token: TransferUndoToken) async throws {
+    public func undo(_ token: TransferUndoToken, operationID: UUID = UUID()) async throws {
         guard !running, !TransferFileSystem.exists(token.originalURL),
               try TransferFileSystem.identity(token.currentURL) == token.identity else { throw TransferEngineError.unsafeUndo }
         running = true; defer { running = false }
         guard try TransferFileSystem.fingerprint(TransferFileSystem.manifest(token.currentURL, cancellation: TransferCancellation())) == token.contentFingerprint else { throw TransferEngineError.unsafeUndo }
-        var record = TransferJournalRecord(operationID: UUID(), itemID: UUID(), source: token.currentURL, destination: token.originalURL, mode: .move, phase: "undoCommitting")
+        var record = TransferJournalRecord(operationID: operationID, itemID: UUID(), source: token.currentURL, destination: token.originalURL, mode: .move, phase: "undoCommitting")
         record.sourceIdentity = token.identity
         try save(record)
         guard try TransferFileSystem.identity(token.currentURL) == token.identity else { throw TransferEngineError.unsafeUndo }
@@ -268,6 +286,6 @@ public actor FileTransferEngine {
             try TransferFileSystem.renameExclusive(token.currentURL, token.originalURL)
         }
         record.destinationIdentity = try TransferFileSystem.identity(token.originalURL)
-        _ = try finish(&record, .init(source: token.currentURL, destination: token.originalURL, status: .completed, message: "已撤销移动。"))
+        _ = try finish(&record, .init(itemID: record.itemID, operationID: record.operationID, source: token.currentURL, destination: token.originalURL, status: .completed, message: "已撤销移动。"))
     }
 }
