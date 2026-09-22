@@ -1,0 +1,173 @@
+import AppKit
+import FinderSync
+import Foundation
+import OSLog
+import RightMouseCore
+
+/// Each menu item retains its own invocation. A later Finder menu cannot change it.
+private final class MenuInvocation: NSObject {
+    let context: ActionContext
+    let action: CommandAction
+    init(context: ActionContext, action: CommandAction) { self.context = context; self.action = action }
+}
+
+final class FinderSync: FIFinderSync {
+    private let producerID = UUID()
+    private let ioQueue = DispatchQueue(label: "cn.rightmouse.finder.configuration", qos: .utility)
+    private let logger = Logger(subsystem: "cn.rightmouse.RightMouse.FinderExtension", category: "Finder")
+    private var configuration = AppConfiguration()
+    private var pendingMove: PendingMoveSnapshot?
+    private var paths: SharedPaths?
+    private var sources: [DispatchSourceFileSystemObject] = []
+    private var refreshTimer: DispatchSourceTimer?
+    private var configurationError = false
+
+    override init() {
+        super.init()
+        // Empty until the host has explicitly configured monitored locations.
+        FIFinderSyncController.default().directoryURLs = []
+        ioQueue.async { [weak self] in self?.initializeStorage() }
+    }
+
+    deinit { sources.forEach { $0.cancel() }; refreshTimer?.cancel() }
+
+    private func initializeStorage() {
+        do {
+            let resolved = try SharedPaths.resolve()
+            DispatchQueue.main.async { [weak self] in self?.paths = resolved }
+            refresh(paths: resolved)
+            watch(resolved.configurationDirectory, paths: resolved)
+            watch(resolved.root, paths: resolved)
+            // Notifications can be lost when directories are atomically replaced. A small
+            // bounded read also refreshes the clipboard snapshot after host cold starts.
+            let timer = DispatchSource.makeTimerSource(queue: ioQueue)
+            timer.schedule(deadline: .now() + 5, repeating: 5)
+            timer.setEventHandler { [weak self] in self?.refresh(paths: resolved) }
+            timer.resume(); refreshTimer = timer
+        } catch {
+            logger.error("Shared storage unavailable")
+            DispatchQueue.main.async { [weak self] in self?.configurationError = true }
+        }
+    }
+
+    private func watch(_ directory: URL, paths: SharedPaths) {
+        let fd = open(directory.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete], queue: ioQueue)
+        source.setEventHandler { [weak self] in self?.refresh(paths: paths) }
+        source.setCancelHandler { close(fd) }
+        source.resume(); sources.append(source)
+    }
+
+    private func refresh(paths: SharedPaths) {
+        do {
+            // The extension is read-only: do not call the host store's corruption backup path.
+            let file = paths.configurationDirectory.appendingPathComponent("configuration.json")
+            let config: AppConfiguration
+            if FileManager.default.fileExists(atPath: file.path) {
+                let data = try PrivateFileIO.read(file, maximumBytes: 2 * 1024 * 1024)
+                config = try JSONDecoder().decode(AppConfiguration.self, from: data)
+                try config.validate()
+            } else { config = AppConfiguration() }
+            let pending: PendingMoveSnapshot?
+            if let data = try? PrivateFileIO.read(paths.pendingMoveURL, maximumBytes: 4096) {
+                pending = try? WireCodec.decoder().decode(PendingMoveSnapshot.self, from: data)
+            } else { pending = nil }
+            // Paths identify monitored UI scope only; they grant no read/write authority.
+            let watched = Set(config.watchedLocations.map { URL(fileURLWithPath: $0.path, isDirectory: true) })
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.configuration = config; self.pendingMove = pending; self.configurationError = false
+                FIFinderSyncController.default().directoryURLs = watched
+            }
+        } catch {
+            logger.error("Configuration refresh rejected")
+            DispatchQueue.main.async { [weak self] in self?.configurationError = true }
+        }
+    }
+
+    override var toolbarItemName: String { "RightMouse" }
+    override var toolbarItemToolTip: String { "RightMouse 文件操作与设置" }
+    override var toolbarItemImage: NSImage { NSImage(systemSymbolName: "cursorarrow.click.2", accessibilityDescription: "RightMouse") ?? NSImage(size: NSSize(width: 18, height: 18)) }
+
+    override func menu(for menuKind: FIMenuKind) -> NSMenu? {
+        let start = ContinuousClock.now
+        let controller = FIFinderSyncController.default()
+        let entryPoint: EntryPoint
+        switch menuKind {
+        case .contextualMenuForItems: entryPoint = .items
+        case .contextualMenuForContainer: entryPoint = .container
+        case .contextualMenuForSidebar: entryPoint = .sidebar
+        default: entryPoint = .toolbar
+        }
+        // Capture Finder values synchronously during the documented callback lifetime.
+        let target = controller.targetedURL()
+        let urls: [URL]
+        if entryPoint == .container { urls = [] }
+        else if entryPoint == .sidebar { urls = target.map { [$0] } ?? [] }
+        else { urls = controller.selectedItemURLs() ?? [] }
+        // The host resolves real object kinds at execution time. A trailing slash
+        // is not reliable evidence that a Finder URL denotes a directory.
+        let container = target.map { FileReference(url: $0, kindHint: entryPoint == .container ? .directory : .unknown) }
+        let context = ActionContext(entryPoint: entryPoint, container: container, selection: urls.map { FileReference(url: $0, kindHint: .unknown) })
+        let menu = NSMenu(title: "RightMouse"); menu.autoenablesItems = false
+        if configurationError {
+            let message = NSMenuItem(title: "RightMouse 配置或共享目录不可用", action: nil, keyEquivalent: "")
+            message.isEnabled = false; menu.addItem(message)
+        }
+        if paths != nil, !configurationError {
+            for entry in MenuPolicy.entries(configuration: configuration, context: context, pendingMove: pendingMove) { menu.addItem(makeItem(entry, context: context)) }
+        }
+        if !menu.items.isEmpty { menu.addItem(.separator()) }
+        let settings = NSMenuItem(title: "RightMouse 设置…", action: #selector(openSettings(_:)), keyEquivalent: "")
+        settings.target = self; menu.addItem(settings)
+        let elapsed = start.duration(to: .now)
+        logger.debug("Built menu in \(String(describing: elapsed), privacy: .public)")
+        return menu
+    }
+
+    private func makeItem(_ entry: MenuEntry, context: ActionContext) -> NSMenuItem {
+        let item = NSMenuItem(title: entry.title, action: entry.action == nil ? nil : #selector(dispatch(_:)), keyEquivalent: "")
+        item.isEnabled = entry.enabled; item.target = self
+        if let action = entry.action { item.representedObject = MenuInvocation(context: context, action: action) }
+        if !entry.children.isEmpty {
+            let submenu = NSMenu(title: entry.title); submenu.autoenablesItems = false
+            entry.children.forEach { submenu.addItem(makeItem($0, context: context)) }; item.submenu = submenu
+        }
+        return item
+    }
+
+    @objc private func dispatch(_ sender: NSMenuItem) {
+        guard let invocation = sender.representedObject as? MenuInvocation, let paths else { return }
+        let request = CommandRequest(context: invocation.context, action: invocation.action, producerInstanceID: producerID)
+        ioQueue.async { [weak self] in
+            do {
+                try InboxStore(directory: paths.inboxDirectory).enqueue(request)
+                guard let url = URL(string: "rightmouse://dispatch/\(request.requestID.uuidString)") else { return }
+                DispatchQueue.main.async { [weak self] in self?.openHost(dispatchURL: url) }
+            } catch {
+                self?.logger.error("Request could not be queued: \(request.requestID.uuidString, privacy: .public)")
+                DispatchQueue.main.async { [weak self] in self?.openHost(dispatchURL: nil) }
+            }
+        }
+    }
+
+    @objc private func openSettings(_ sender: NSMenuItem) { openHost(dispatchURL: nil) }
+
+    private func openHost(dispatchURL: URL?) {
+        let host = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        guard host.pathExtension == "app", Bundle(url: host)?.bundleIdentifier == "cn.rightmouse.RightMouse" else {
+            logger.error("Embedding host identity mismatch"); return
+        }
+        let options = NSWorkspace.OpenConfiguration(); options.activates = dispatchURL == nil
+        if let dispatchURL {
+            NSWorkspace.shared.open([dispatchURL], withApplicationAt: host, configuration: options) { [weak self] _, error in
+                if error != nil { self?.logger.error("Host wake failed; queued request retained") }
+            }
+        } else {
+            NSWorkspace.shared.openApplication(at: host, configuration: options) { [weak self] _, error in
+                if error != nil { self?.logger.error("Host launch failed") }
+            }
+        }
+    }
+}

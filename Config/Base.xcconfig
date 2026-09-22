@@ -1,0 +1,9 @@
+MACOSX_DEPLOYMENT_TARGET = 14.0
+SWIFT_VERSION = 5.0
+CLANG_ENABLE_MODULES = YES
+ENABLE_HARDENED_RUNTIME = YES
+CODE_SIGN_STYLE = Automatic
+RIGHTMOUSE_APP_GROUP = group.cn.rightmouse.shared
+// Set your Apple developer team and registered application group in Local.xcconfig.
+// The placeholder group is for development only; it is not a registered capability.
+#include? "Local.xcconfig"

@@ -22,7 +22,7 @@
 | SDK | CLT MacOSX SDK 包含 SwiftUI、AppKit、FinderSync；可编译原生应用与扩展 |
 | XCTest | CLT 缺失 XCTest 模块，`swift test` 未通过；不能计入测试成功 |
 | 签名身份 | `security find-identity -v -p codesigning` 显示 0 valid identities |
-| Finder 登记 | 沙盒外只读 `pluginkit -m -A -D -i cn.rightmouse.RightMouse.FinderExtension` 成功返回，无登记项 |
+| Finder 登记 | 基线首次查询无登记项；后续开发扩展已登记且系统启动进程，见下方接入记录 |
 | Git | 已初始化 main，SDD 基线提交 8df543f |
 
 ## 2. 已采用的施工决策
@@ -33,7 +33,7 @@
 
 ## 3. 剩余验证
 
-G0 尚未通过：真实 Finder 加载、App Group 沙盒共享、扩展触发宿主冷启动和权限传递缺少完整证据。可以继续独立核心和界面开发，但不能把这些进展当成原生接入通过。macOS 14、其他架构、真实外置卷和公证环境也尚未提供或验证。
+G0 尚未通过：开发扩展已在本机真实加载，App Group 路径查找成功，详见 [Finder 接入记录](../../../Config/validation/finder-load-2026-09-22.md)。共享读写、实际菜单命令、扩展触发宿主冷启动和权限传递仍缺少完整证据。可以继续独立核心和界面开发，但不能把这些进展当成原生接入通过。macOS 14、其他架构、真实外置卷和公证环境也尚未提供或验证。
 
 ## 参考
 
