@@ -31,6 +31,8 @@
 
 施工澄清（2026-09-22）：createFile、pasteMove、transfer 的 destination 字段仍必须存在，但允许显式 null，表示由宿主展示目录选择器；取消选择不产生文件变更。这样能够实现 FR-007 的“选择目录”和跨目录多选交互，不使用伪造路径。非空 destination 的 kindHint 为 unknown 时，宿主根据实际选中对象解析目录，不能仅用 URL 尾部斜杠判断。
 
+保存目标引用（2026-09-23）：既有可选字段 `bookmarkToken` 用于引用宿主已保存的最近目标或收藏记录。它不是授权本身，也不是文件路径；宿主先按 ID 查找记录，再解析安全书签及相应身份约束。未知或已移除 token 拒绝执行，不回退到 `fileURL`。空选择的 container 同样遵守此规则，目录打开与路径复制使用解析结果。没有 token 的普通系统选择器引用继续使用明确选中的 URL。开发宿主与扩展应来自同一构建包，旧开发组件混用不在兼容承诺内。
+
 ## 2. 运输机制和信任边界
 
 发布路径：共享容器 `Inbox/<requestID>.tmp` 写完并关闭，再在同目录无覆盖提交为 `<requestID>.json`。不同扩展实例使用不同 producerInstanceID。请求入队后显式唤醒已知宿主，传递 `rightmouse://dispatch/<requestID>`；宿主校验 scheme/host/path 且拒绝 query/fragment，不从 URL 接收 action 或文件路径。

@@ -16,7 +16,7 @@ open .build/native/RightMouse.app
 
 脚本生成的 ad-hoc 开发版会实际检查共享容器的读写能力。共享容器不可用时，宿主使用 Application Support 下独立的 `RightMouse-Development` 目录，并常驻提示 Finder 菜单暂不可用；可以继续在应用内的文件操作台使用本地功能。正式签名构建与 Finder 扩展不允许此降级。`RIGHTMOUSE_DATA_DIR` 仅供带开发标志的宿主使用，测试工具通过显式临时目录注入存储。
 
-验证范围及开发包校验值见 [启动存储记录](Config/validation/development-storage-fallback-2026-09-23.md)。
+启动存储修复的历史验证见 [启动存储记录](Config/validation/development-storage-fallback-2026-09-23.md)；最新构建的检查结果与校验值见下文的工作流集成证据。
 
 `scripts/package-app.sh --development` 生成开发 ZIP。完整 Xcode 工程为 `RightMouse.xcodeproj`；新增 Swift 文件后运行 `python3 Config/generate-project.py`。标准 XCTest 和正式签名步骤见 [构建说明](Config/README.md)。
 
@@ -25,8 +25,9 @@ open .build/native/RightMouse.app
 - 新建 TXT、Markdown、JSON、YAML、HTML、Shell 文件，导入自定义模板。
 - 复制路径、名称、无扩展名名称和 Shell 引用格式。
 - 剪切会话、粘贴移动、复制到和移动到指定目录。
-- 重名时跳过或保留两份；移动前校验，跨卷先提交目标再核对来源。
-- 收藏目录、Terminal、VS Code 与自定义应用入口。
+- 重名时跳过或保留两份，可应用于本批后续冲突；等待选择时保留进度，取消保留已完成项目。
+- 最近目标保留 10 项，使用安全书签及目录身份核对；支持修复、移除与清空记录。
+- 收藏目录、Terminal、VS Code 与自定义应用入口；VS Code 跨目录选择先指定一个项目目录。
 - 菜单开关、排序、分组、预览、任务进度与恢复核对界面。
 - 液态玻璃导航与预览，主窗口默认 960×680 pt，在当前屏幕居中；旧系统与减少透明度模式提供材质降级。
 
@@ -49,11 +50,11 @@ flowchart LR
 
 ## 当前验证边界
 
-129 项核心夹具检查（包括 10 项开发存储策略场景）和 59 项真实宿主集成检查通过，后续操作的验证过程见 [恢复证据](specs/001-finder-core/evidence/EV-followup-hardening-001.md)。宿主与嵌入扩展已实际编译，开发签名结构验证通过；Finder 登记和进程加载证据见 [接入记录](Config/validation/finder-load-2026-09-22.md)。后续系统日志已确认当前 ad-hoc 构建的 App Group 访问被拒绝，路径查找成功不代表共享通信可用。
+150 项核心夹具检查、168 项宿主侧检查通过（153 项真实宿主断言及 15 项打开方式规划断言），详情及最新开发包校验值见 [工作流集成证据](specs/001-finder-core/evidence/EV-workflows-001.md)。撤销与重试的早期验证见 [恢复证据](specs/001-finder-core/evidence/EV-followup-hardening-001.md)。宿主与嵌入扩展已实际编译，开发签名结构验证通过；Finder 登记和进程加载证据见 [接入记录](Config/validation/finder-load-2026-09-22.md)。后续系统日志已确认当前 ad-hoc 构建的 App Group 访问被拒绝，路径查找成功不代表共享通信可用。
 
 尚未完整通过：真实 Finder 菜单到宿主的端到端操作、所有权限撤回场景、真实双卷/外置卷故障、最低 macOS 版本、完整键盘与 VoiceOver 验收、Developer ID 签名及公证。当前机器没有有效分发证书，也未安装完整 Xcode。开发包不等于已公证发行版。
 
-[优化菜单规则基准](docs/sdd/evidence/menu-policy-benchmark/README.md) 保留三种场景各 100 次的原始样本；固定源码快照轮纯规则 P95 为 1.955 / 4.104 / 0.169 ms，不包含真实 Finder 与 NSMenu 构造。
+[优化菜单规则历史基准](docs/sdd/evidence/menu-policy-benchmark/README.md) 保留三种场景各 100 次的原始样本和对应源码摘要；该轮纯规则 P95 为 1.955 / 4.104 / 0.169 ms，不包含真实 Finder 与 NSMenu 构造，也不作为新增最近目标菜单的性能结果。
 
 ## 规格与版本管理
 

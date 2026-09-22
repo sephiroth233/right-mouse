@@ -26,7 +26,12 @@ Retry also rejects same-path replacement of either a failed source or the origin
 destination directory. Permission repair retains the same inode, bytes and mtime
 and remains eligible for retry. Rejection preserves both objects and the original
 receipt without creating child work.
-The current complete harness passes 59 checks.
+The complete harness now passes 168 host-side checks: 153 real HostController
+fixture assertions and 15 pure Open With planning assertions. ConflictChecks
+adds durable waiting and batch decisions; RecentDestinationHostChecks adds
+bookmarked target selection, invalid-reference refusal, repair and restart;
+OpenWithHostChecks records the final OS application-open boundary to verify
+project choice, cancellation, errors and directory identity without launching apps.
 
 The harness provides local APFS/process-level evidence. It does not establish
 Finder extension transport, App Group signing, sandbox/TCC behavior,

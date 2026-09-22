@@ -16,7 +16,8 @@
 
 | 模型 | 核心字段 | 唯一写入者与约束 |
 | --- | --- | --- |
-| AppConfiguration | schemaVersion、revision、actions、favorites、integrations、watchedLocations | 宿主；revision 单调递增；扩展只读有效快照 |
+| AppConfiguration | schemaVersion、revision、actions、favorites、recentDestinations、integrations、watchedLocations | 宿主；revision 单调递增；扩展只读有效快照 |
+| RecentDestination | id、name、path、bookmarkData、directoryIdentity、lastUsedAt | 最多 10 项，最近使用者移到首位；path 只作展示提示，执行时解析书签并核对设备、inode、类型 |
 | MenuAction | id、commandType、enabled、order、groupID、contexts | 宿主；稳定 ID 不随展示名变化；数量 <= 100 |
 | ActionContext | invocationID、entryPoint、container、selection | 扩展生成不可变快照；selection <= 1024；不证明访问权 |
 | FileReference | refID、fileURL、kindHint、bookmarkToken? | 来源进程创建；URL 为定位提示；宿主验证实际对象类型 |
@@ -52,6 +53,10 @@ received -> rejected（非法/过期，不进入执行器）
 ```
 
 `received` 仅为接收阶段；accepted 后 expiry 不再中止正在运行的操作。UI 等待 10 秒没有回执只提示“正在连接或等待”，不能创建新 requestID 自动重试。`waitingForUser` 等待上限建议 15 分钟，到期停止未开始项目并报告已完成项，不回滚已完成文件。
+
+冲突对话框展示前先持久保存 `waitingForUser`，选择后保存 `running`，随后引擎重新核对来源与目标目录身份。任务级“对本批后续冲突使用同一选择”仅覆盖此请求的后续冲突，不修改全局偏好；不持久重放用户选择。等待状态的写入失败会停止后续操作并进入核对。关闭窗口、取消或 15 分钟到期均取消剩余项目，已完成项保持原结果。重启后不存在可继续的旧对话框，等待任务进入 `needsReview`。
+
+最近目标是 schema 1 的可选新增字段：旧配置未包含该字段时按空数组读取，保留原偏好。配置保存前检查编码总量不超过读取器的 8 MiB 上限。最近目标或收藏菜单将记录 ID 写入既有 `FileReference.bookmarkToken`；宿主必须找到对应记录并解析书签，未知或已移除 token 明确拒绝，不按捕获的路径文字降级。手动选择、成功使用会更新历史；移除和清空只影响记录，不删目录。失效项只有经新的系统目录选择才更新授权和身份。
 
 整批聚合规则：全部项目成功为 completed；全部跳过为 completed 并明确零变更；有成功且有失败/取消/跳过为 partial；无成功且用户取消为 cancelled；无成功且错误为 failed；任一项需要核对则优先 needsReview。全跳过不能在 UI 写成“全部移动成功”。
 
