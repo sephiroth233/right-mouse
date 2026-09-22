@@ -54,6 +54,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
     public var actions: [ConfiguredAction]
     public var favorites: [SavedLocation] = []
     public var watchedLocations: [SavedLocation] = []
+    public var recentDestinations: [RecentDestination] = []
     public var integrations: [AppIntegration]
     public var templates: [FileTemplate]
     public init() {
@@ -73,6 +74,26 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         ]
         templates = FileTemplate.builtIns
     }
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion, revision, compactMenu, launchAtLogin, revealCreatedFile, conflictPolicy
+        case actions, favorites, watchedLocations, recentDestinations, integrations, templates
+    }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try values.decode(Int.self, forKey: .schemaVersion)
+        revision = try values.decode(Int.self, forKey: .revision)
+        compactMenu = try values.decode(Bool.self, forKey: .compactMenu)
+        launchAtLogin = try values.decode(Bool.self, forKey: .launchAtLogin)
+        revealCreatedFile = try values.decode(Bool.self, forKey: .revealCreatedFile)
+        conflictPolicy = try values.decode(String.self, forKey: .conflictPolicy)
+        actions = try values.decode([ConfiguredAction].self, forKey: .actions)
+        favorites = try values.decode([SavedLocation].self, forKey: .favorites)
+        watchedLocations = try values.decode([SavedLocation].self, forKey: .watchedLocations)
+        integrations = try values.decode([AppIntegration].self, forKey: .integrations)
+        templates = try values.decode([FileTemplate].self, forKey: .templates)
+        // Additive schema-1 field: an older configuration retains every other setting.
+        recentDestinations = try values.decodeIfPresent([RecentDestination].self, forKey: .recentDestinations) ?? []
+    }
     public func validate() throws {
         guard schemaVersion == 1 else { throw ConfigurationError.futureVersion(schemaVersion) }
         guard revision >= 0, [actions.count, favorites.count, watchedLocations.count, integrations.count, templates.count].allSatisfy({ $0 <= 100 }) else { throw ConfigurationError.invalid("配置项数量不能超过 100。") }
@@ -82,6 +103,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         let commands: Set<String> = ["createFile", "copyText", "stageMove", "pasteMove", "copyTo", "moveTo", "openFavorite", "openWith"]
         guard actions.allSatisfy({ commands.contains($0.commandType) }), ["ask", "skip", "keepBoth"].contains(conflictPolicy) else { throw ConfigurationError.invalid("配置包含未知操作。") }
         for template in templates { try template.validate() }
+        try RecentDestinationHistory.validate(recentDestinations)
         for location in favorites + watchedLocations {
             guard location.path.hasPrefix("/"), !location.path.contains("\0"), !location.name.isEmpty else { throw ConfigurationError.invalid("目录配置无效。") }
         }
@@ -137,6 +159,7 @@ public final class ConfigurationStore {
         value.revision = max(current.revision, value.revision) + 1
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(value)
+        guard data.count <= 8 * 1024 * 1024 else { throw ConfigurationError.invalid("配置超过 8 MiB 存储上限，原配置已保留。请减少模板或目录记录。") }
         try PrivateFileIO.write(data, to: fileURL)
         return value
     }
