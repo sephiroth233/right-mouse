@@ -1,0 +1,8 @@
+{
+  "hw.model": "Mac16,13",
+  "machdep.cpu.brand_string": "Apple M4",
+  "hw.memsize": "25769803776",
+  "hw.logicalcpu": "10",
+  "recordedAtUTC": "2026-09-22T16:33:11.121991+00:00",
+  "scope": "Read-only supplemental hardware metadata on the same benchmark host; no serial number, hostname, or user file data."
+}

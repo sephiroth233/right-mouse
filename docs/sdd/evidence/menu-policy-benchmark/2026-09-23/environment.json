@@ -1,0 +1,41 @@
+{
+  "recordedAtUTC": "2026-09-22T16:31:33.188691+00:00",
+  "machine": "arm64",
+  "hardwareModel": "unavailable: sysctl: sysctl fmt -1 1024 1: Operation not permitted",
+  "processor": "unavailable: sysctl: sysctl fmt -1 1024 1: Operation not permitted",
+  "memoryBytes": "unavailable: sysctl: sysctl fmt -1 1024 1: Operation not permitted",
+  "logicalCPUs": "unavailable: sysctl: sysctl fmt -1 1024 1: Operation not permitted",
+  "macOSVersion": "27.0",
+  "macOSBuild": "26A428",
+  "compiler": "Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)\nTarget: arm64-apple-macosx27.0.0",
+  "developerDirectory": "/Library/Developer/CommandLineTools",
+  "xcodeVersion": "unavailable: xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer directory '/Library/Developer/CommandLineTools' is a command line tools instance",
+  "sdkVersion": "27.0",
+  "optimization": "-O for both RightMouseCore and benchmark; Swift language mode 5; deployment macOS 14.0",
+  "gitCommit": "c38366e9734cd6f2b9d619a3b3c40dc3aeb7dcc9",
+  "sourceSHA256": {
+    "Packages/RightMouseCore/Sources/RightMouseCore/FileOperations/FileTransferEngine.swift": "a0cc0a47c1025d356eff1f9dadba8cc22ef3c0ae270fc9142f93e457267dc901",
+    "Packages/RightMouseCore/Sources/RightMouseCore/FileOperations/TransferFileSystem.swift": "120a53c42e0985c236a86dd9dac6a208397166a24272d9621295a979435b25e3",
+    "Packages/RightMouseCore/Sources/RightMouseCore/FileOperations/TransferTypes.swift": "e1ef3a6b35061b97788e9affac458ef3d081520bf0c0e68d800344db615c7fb9",
+    "Packages/RightMouseCore/Sources/RightMouseCore/Menu/MenuPolicy.swift": "766c720b999f481629d47433613d515ba27f23f4ec3632c58c74f58ec7691ffb",
+    "Packages/RightMouseCore/Sources/RightMouseCore/Protocol/Command.swift": "d1b2371d07b307ba699dd83900d349d1b72a84a0238aaa355102d3660651a408",
+    "Packages/RightMouseCore/Sources/RightMouseCore/Protocol/RequestValidator.swift": "9edd69fff9c20ba8a4c4a7184f3e3c3f3b76642e18e280f8a50384bb404f05e4",
+    "Packages/RightMouseCore/Sources/RightMouseCore/Protocol/SharedStorage.swift": "1b3ea764530279b5c2c42dcd09cf12ad02176c54bb3e1ae4b3ad0b2032f38117",
+    "Packages/RightMouseCore/Sources/RightMouseCore/Settings/Configuration.swift": "c1832765c0321ced9e63bf5b9baf0d14120a67e4908dcbbe73fb8d390c9bdcf7",
+    "Packages/RightMouseCore/Sources/RightMouseCore/Templates/TemplateStore.swift": "3883fdd9125cb86c99bb89520396f71b91ed29a3a4ff1af83b1df743695db42c",
+    "tools/MenuPolicyBenchmark/main.swift": "5c5f7992bc724ab1059479793f3fd947163343883095fa32ccb68ce016f46e15",
+    "scripts/benchmark-menu-policy.sh": "f8b39d8cfc93ddeab6aa134e5d471f8d37792ced971cb1f2515a9bc25862f3a9"
+  },
+  "binarySHA256": "94bb6367dc17d9100be0ad0144c3c06b115be9684b4ce51025c9e2a2df164677",
+  "scope": "Pure MenuPolicy rule generation only. This evidence does not satisfy AC-027 Finder menu construction acceptance.",
+  "coldDefinition": "First timed MenuPolicy call in a new executable process after fixture setup. No warmup; OS/framework caches are not flushed.",
+  "timing": "DispatchTime monotonic nanoseconds; fixture setup, validation, recursive output verification, destruction, and JSON encoding outside the measured call interval.",
+  "samplePolicy": "100 sequential calls per scenario, all raw samples retained, no outlier removal; each scenario uses a separate new process.",
+  "limitations": [
+    "No Finder invocation or NSMenu materialization",
+    "No disk configuration loading, bookmarks, or IPC",
+    "No machine exclusivity or CPU affinity; other work can affect results",
+    "Synthetic maximal stored configuration; normal UI starts with eight action categories",
+    "First process call is not a cold OS boot measurement"
+  ]
+}
