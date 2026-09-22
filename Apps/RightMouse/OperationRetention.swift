@@ -26,7 +26,11 @@ struct OperationRetention {
     func prune(now: Date = Date()) -> RetentionReport {
         var report = RetentionReport()
         do {
-            guard ledger.directory.standardizedFileURL == paths.operationsDirectory.appendingPathComponent("Commands").standardizedFileURL else { throw RetentionFailure.invalid }
+            // URL's directory hint can differ when Commands is constructed before
+            // first creation. Compare normalized filesystem paths, then validate the
+            // same root/descendants below with no-follow descriptors and ownership.
+            guard ledger.directory.isFileURL,
+                  ledger.directory.standardizedFileURL.path == paths.operationsDirectory.appendingPathComponent("Commands").standardizedFileURL.path else { throw RetentionFailure.invalid }
             let root = try RetentionDirectory(absolute: paths.root)
             let privateRoot = try RetentionDirectory(absolute: paths.privateRoot)
             let operations = try privateRoot.child("Operations")
