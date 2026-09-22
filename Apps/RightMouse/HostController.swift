@@ -840,7 +840,7 @@ import Darwin
                 var items: [TaskReviewItemPresentation] = []
                 for record in records {
                     let assessment = await engine.recoveryAssessment(record)
-                    items.append(TaskReviewItemPresentation(id: record.itemID, name: record.source.lastPathComponent, status: stateTitle(record.phase), detail: assessment, source: record.source, destination: record.destination, sourceObservation: observation(record.source), destinationObservation: observation(record.destination), staging: stagingItems.first { $0.itemID == record.itemID }))
+                    items.append(TaskReviewItemPresentation(id: record.itemID, name: record.source.lastPathComponent, status: stateTitle(record.phase), detail: assessment, source: record.source, destination: record.destination, sourceObservation: observation(record.source), destinationObservation: observation(record.destination), staging: stagingItems.first { $0.itemID == record.itemID }, sourceRecoveryURL: record.sourceCleanupURL))
                 }
                 if items.isEmpty {
                     items = entry.receipt.itemResults.map { item in
@@ -870,5 +870,12 @@ import Darwin
         switch action { case .createFile: return "新建文件"; case .copyText: return "复制路径与名称"; case .stageMove: return "剪切文件"; case .pasteMove: return "粘贴待移动文件"; case let .transfer(mode,_,_): return mode == .copy ? "复制文件" : "移动文件"; case .openFavorite: return "打开常用目录"; case .openWith: return "在应用中打开" }
     }
     private func phaseTitle(_ value: String) -> String { ["scanning":"正在扫描文件","copying":"正在复制","verifying":"正在校验","committing":"正在提交目标","sourceCleanupPending":"正在核对来源"][value] ?? stateTitle(value) }
-    private func stateTitle(_ value: String) -> String { ["completed":"完成","success":"成功","partial":"部分完成","failed":"失败","cancelled":"已取消","needsReview":"需要核对","sourceRetained":"源文件已保留","skipped":"已跳过"][value] ?? value }
+    private func stateTitle(_ value: String) -> String {
+        ["completed":"完成", "success":"成功", "partial":"部分完成", "failed":"失败", "cancelled":"已取消",
+         "needsReview":"需要核对", "sourceRetained":"源文件已保留", "skipped":"已跳过", "planned":"等待执行",
+         "staging":"暂存中", "verified":"校验完成", "committing":"正在提交", "targetCommitted":"目标已提交",
+         "sourceCleanupPending":"待核对来源", "sourceCleanupIsolating":"正在保留来源副本",
+         "sourceCleanupIsolated":"来源副本待核对", "sourceCleanupNeedsReview":"来源副本待核对",
+         "sourceRemoved":"来源已清理", "undoCommitting":"撤销待核对"][value] ?? value
+    }
 }

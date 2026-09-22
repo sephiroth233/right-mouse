@@ -153,6 +153,20 @@ private struct TaskReviewView: View {
                             if !item.detail.isEmpty { Text(item.detail).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) }
                             ReviewLocationRow(model: model, label: "来源", url: item.source, observation: item.sourceObservation)
                             ReviewLocationRow(model: model, label: "目标", url: item.destination, observation: item.destinationObservation)
+                            if let sourceRecoveryURL = item.sourceRecoveryURL {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("待核对的来源副本").font(.callout.weight(.semibold))
+                                    HStack(alignment: .top, spacing: 12) {
+                                        Text(sourceRecoveryURL.path).font(.callout).textSelection(.enabled)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                        Button("在 Finder 中定位") { model.revealReviewURL(sourceRecoveryURL) }
+                                            .accessibilityLabel("在 Finder 中定位待核对的来源副本：\(sourceRecoveryURL.lastPathComponent)")
+                                    }
+                                    Text("此处可能保留原来源；请核对目标与该副本，不会自动删除或移回。")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }.accessibilityElement(children: .contain)
+                            }
                             if let staging = item.staging { StagingReviewSection(model: model, staging: staging) }
                             if review.canConfirm {
                                 Toggle("我已核对这一项", isOn: Binding(get: { acknowledged.contains(item.id) }, set: { value in

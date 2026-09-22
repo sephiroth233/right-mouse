@@ -11,7 +11,7 @@ struct RightMouseHostCheck {
     @MainActor
     static func main() async {
         do {
-            let count = try await run() + runFollowupChecks() + runConflictChecks() + runRecentDestinationHostChecks() + runOpenWithChecks() + runOpenWithHostChecks() + runDiagnosticHostChecks() + runRetentionChecks() + runSetupExerciseChecks() + runStorageSeparationHostChecks() + runStagingPresentationChecks() + runStagingHostChecks()
+            let count = try await run() + runFollowupChecks() + runConflictChecks() + runRecentDestinationHostChecks() + runOpenWithChecks() + runOpenWithHostChecks() + runDiagnosticHostChecks() + runRetentionChecks() + runSetupExerciseChecks() + runStorageSeparationHostChecks() + runStagingPresentationChecks() + runStagingHostChecks() + runSourceRecoveryHostChecks()
             print("PASS: \(count) host-side checks (HostController integration and open-with planning)")
         } catch {
             fputs("FAIL host: \(error)\n", stderr)

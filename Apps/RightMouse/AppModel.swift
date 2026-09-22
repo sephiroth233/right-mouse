@@ -24,6 +24,7 @@ struct TaskReviewItemPresentation: Identifiable {
     var sourceObservation: String = "未检查"
     var destinationObservation: String = "未检查"
     var staging: StagingRecoveryItem? = nil
+    var sourceRecoveryURL: URL? = nil
 }
 
 /// The host supplies a fresh, read-only inspection of known operation records.

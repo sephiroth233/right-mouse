@@ -132,7 +132,9 @@ struct OperationRetention {
                                   journal.phase == item.status.rawValue, journal.source == item.source, journal.mode == expectedMode,
                                   try journal.result.map({ try WireCodec.encoder().encode($0) }) == WireCodec.encoder().encode(item),
                                   local(item.source), item.destination.map(local) ?? true,
-                                  journal.stagingURL == nil else { throw RetentionFailure.invalid }
+                                  journal.stagingURL == nil, journal.sourceCleanupURL == nil,
+                                  journal.sourceCleanupIdentity == nil, journal.sourceCleanupContainerIdentity == nil,
+                                  journal.sourceCleanupState == nil || journal.sourceCleanupState == .completed else { throw RetentionFailure.invalid }
                             if let destination = item.destination { guard journal.destination == destination else { throw RetentionFailure.invalid } }
                             if let undo = item.undoToken {
                                 guard local(undo.originalURL), local(undo.currentURL), undo.originalURL == item.source, undo.currentURL == item.destination else { throw RetentionFailure.invalid }

@@ -19,6 +19,14 @@ private struct RetentionCheckFailure: Error, CustomStringConvertible { let descr
     func check(_ test: @autoclosure () throws -> Bool, _ message: String) throws {
         guard try test() else { throw RetentionCheckFailure(description: message) }; count += 1; print("PASS retention: \(message)")
     }
+    for split in [false, true] {
+        let shared = root.appendingPathComponent(split ? "fresh-shared" : "fresh-single")
+        let fresh = SharedPaths(root: shared, privateRoot: split ? root.appendingPathComponent("fresh-private") : nil)
+        try fresh.prepare()
+        let freshLedger = try CommandLedger(directory: fresh.operationsDirectory.appendingPathComponent("Commands"))
+        let empty = OperationRetention(paths: fresh, ledger: freshLedger).prune(now: now)
+        try check(empty.scannedRequests == 0 && empty.removedRecords == 0 && empty.issues == 0, "fresh \(split ? "split" : "single") layout without optional operation directories has no recovery issue")
+    }
     func receiptURL(_ id: UUID) -> URL { paths.receiptsDirectory.appendingPathComponent(id.uuidString + ".json") }
     func save(_ entry: LedgerEntry) throws { try ledger.save(entry); try PrivateFileIO.write(WireCodec.encoder().encode(entry.receipt), to: receiptURL(entry.request.requestID)) }
     func readRequest(at date: Date, status: ReceiptStatus = .completed, action: CommandAction = .copyText(format: .path)) throws -> CommandRequest {
@@ -51,6 +59,11 @@ private struct RetentionCheckFailure: Error, CustomStringConvertible { let descr
     var pinned: [CommandRequest] = []
     for status in [ReceiptStatus.accepted, .planning, .running, .waitingForUser, .cancelling, .needsReview] { pinned.append(try readRequest(at: old, status: status)) }
     let (complete, completeRecord) = try await transfer(at: old)
+    let legacyJournalURL = transfers.appendingPathComponent(completeRecord.result!.items[0].itemID.uuidString + ".json")
+    var legacyJournalObject = try JSONSerialization.jsonObject(with: Data(contentsOf: legacyJournalURL)) as! [String: Any]
+    legacyJournalObject.removeValue(forKey: "sourceCleanupURL")
+    legacyJournalObject.removeValue(forKey: "sourceCleanupState")
+    try PrivateFileIO.write(JSONSerialization.data(withJSONObject: legacyJournalObject, options: [.sortedKeys]), to: legacyJournalURL)
     let source = completeRecord.result!.items[0].source, copied = completeRecord.result!.items[0].destination!
     let sentinel = destination.appendingPathComponent(".rightmouse-unrelated-staging")
     try FileManager.default.createDirectory(at: sentinel, withIntermediateDirectories: false)
@@ -76,6 +89,39 @@ private struct RetentionCheckFailure: Error, CustomStringConvertible { let descr
     var stagedJournal = try JSONDecoder().decode(TransferJournalRecord.self, from: Data(contentsOf: stagedJournalURL))
     stagedJournal.stagingURL = sentinel.appendingPathComponent("payload")
     try PrivateFileIO.write(JSONEncoder().encode(stagedJournal), to: stagedJournalURL)
+    // Keep an otherwise completely eligible retry component when only one
+    // member retains source-isolation evidence. Retention must never inspect
+    // or mutate any of the user payload locations encoded in that evidence.
+    let (isolatedParent, isolatedParentRecord) = try await transfer(at: old)
+    let (isolatedChild, isolatedChildRecord) = try await transfer(at: old)
+    var linkedIsolation = isolatedParentRecord; linkedIsolation.retryRequestID = isolatedChild.requestID
+    try followups.save(linkedIsolation)
+    let isolatedItem = isolatedChildRecord.result!.items[0]
+    let quarantine = userDirectory.appendingPathComponent(".rightmouse-source-isolation-" + isolatedItem.itemID.uuidString)
+    let quarantineBytes = Data("isolated original source evidence".utf8)
+    try quarantineBytes.write(to: quarantine)
+    let isolationJournalURL = transfers.appendingPathComponent(isolatedItem.itemID.uuidString + ".json")
+    var isolationObject = try JSONSerialization.jsonObject(with: Data(contentsOf: isolationJournalURL)) as! [String: Any]
+    isolationObject["sourceCleanupURL"] = quarantine.absoluteString
+    try PrivateFileIO.write(JSONSerialization.data(withJSONObject: isolationObject, options: [.sortedKeys]), to: isolationJournalURL)
+    let isolatedEvidenceURLs = [isolatedParent, isolatedChild].flatMap { request in
+        [ledger.directory.appendingPathComponent(request.requestID.uuidString + ".json"), receiptURL(request.requestID), followups.directory.appendingPathComponent(request.requestID.uuidString + ".json")]
+    } + [transfers.appendingPathComponent(isolatedParentRecord.result!.items[0].itemID.uuidString + ".json"), isolationJournalURL]
+    let isolatedEvidenceBytes = try isolatedEvidenceURLs.map { try Data(contentsOf: $0) }
+    var uncertainSourceCleanups: [(UUID, URL, Data)] = []
+    for state in [SourceCleanupState.isolating, .isolated, .needsReview] {
+        let (request, followup) = try await transfer(at: old)
+        let journalURL = transfers.appendingPathComponent(followup.result!.items[0].itemID.uuidString + ".json")
+        var journal = try JSONDecoder().decode(TransferJournalRecord.self, from: Data(contentsOf: journalURL))
+        journal.sourceCleanupState = state
+        try PrivateFileIO.write(JSONEncoder().encode(journal), to: journalURL)
+        uncertainSourceCleanups.append((request.requestID, journalURL, try Data(contentsOf: journalURL)))
+    }
+    let (sourceCleanupComplete, completedCleanupRecord) = try await transfer(at: old)
+    let completedCleanupURL = transfers.appendingPathComponent(completedCleanupRecord.result!.items[0].itemID.uuidString + ".json")
+    var completedCleanupJournal = try JSONDecoder().decode(TransferJournalRecord.self, from: Data(contentsOf: completedCleanupURL))
+    completedCleanupJournal.sourceCleanupState = .completed
+    try PrivateFileIO.write(JSONEncoder().encode(completedCleanupJournal), to: completedCleanupURL)
     let (damagedJournal, damagedRecord) = try await transfer(at: old)
     try PrivateFileIO.write(Data("broken journal".utf8), to: transfers.appendingPathComponent(damagedRecord.result!.items[0].itemID.uuidString + ".json"))
     let (extraJournal, _) = try await transfer(at: old)
@@ -89,7 +135,7 @@ private struct RetentionCheckFailure: Error, CustomStringConvertible { let descr
     try FileManager.default.createSymbolicLink(at: receiptURL(symlinked.requestID), withDestinationURL: external)
     // Receipt state time governs age even when the record itself was just written.
     let report = OperationRetention(paths: paths, ledger: ledger).prune(now: now)
-    try check(report.prunedRequests == 6, "only evidenced expired terminal requests are pruned")
+    try check(report.prunedRequests == 7, "only evidenced expired terminal requests are pruned")
     try check(try ledger.entry(oldStage.requestID) == nil, "expired stageMove dedupe record is removed after pending state lifetime")
     try check(try ledger.entry(failedCreate.requestID) == nil, "failed create with no item effects is eligible")
     try check(try ledger.entry(errorPinned.requestID) != nil, "recoveryRequired error pins a failed terminal receipt")
@@ -103,6 +149,14 @@ private struct RetentionCheckFailure: Error, CustomStringConvertible { let descr
     try check(try ledger.entry(missingChildParent.requestID) != nil, "missing retry child pins its parent")
     try check(try ledger.entry(badSidecar.requestID) != nil && ledger.entry(missingSidecar.requestID) != nil, "bad or missing followup evidence pins its task")
     try check(try ledger.entry(staged.requestID) != nil && ledger.entry(damagedJournal.requestID) != nil, "staging reference and malformed journal preserve recovery evidence")
+    try check(try ledger.entry(isolatedParent.requestID) != nil && ledger.entry(isolatedChild.requestID) != nil, "source isolation reference pins its entire expired terminal retry component")
+    try check(try isolatedEvidenceURLs.map { try Data(contentsOf: $0) } == isolatedEvidenceBytes, "source isolation keeps every parent/child command receipt followup and journal byte intact")
+    try check(try Data(contentsOf: isolatedItem.source) == Data("user bytes must survive".utf8) && Data(contentsOf: isolatedItem.destination!) == Data("user bytes must survive".utf8) && Data(contentsOf: quarantine) == quarantineBytes, "retention leaves source isolated evidence and committed target payloads untouched")
+    try check(try ledger.entry(complete.requestID) == nil && !FileManager.default.fileExists(atPath: legacyJournalURL.path), "legacy journal without source cleanup fields remains eligible for ordinary terminal pruning")
+    for (id, journalURL, bytes) in uncertainSourceCleanups {
+        try check(try ledger.entry(id) != nil && Data(contentsOf: journalURL) == bytes, "uncertain source cleanup state without a URL preserves terminal evidence")
+    }
+    try check(try ledger.entry(sourceCleanupComplete.requestID) == nil && !FileManager.default.fileExists(atPath: completedCleanupURL.path), "completed source cleanup without retained references permits ordinary terminal pruning")
     try check(try ledger.entry(extraJournal.requestID) != nil, "invalid additional journal with known operation ID pins its complete task")
     try check(try Data(contentsOf: brokenURL) == Data("bad ledger".utf8) && report.issues > 0, "isolated malformed ledger is preserved without blocking unrelated cleanup")
     try check(try FileManager.default.destinationOfSymbolicLink(atPath: receiptURL(symlinked.requestID).path) == external.path && Data(contentsOf: external) == externalBytes, "symlink and external target remain untouched")
