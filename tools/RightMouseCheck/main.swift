@@ -10,6 +10,10 @@ do {
     total += try await runTransferRecoveryChecks()
     total += try runStorageFallbackChecks()
     total += try runRecentDestinationChecks()
+    total += try await runTransferFailureChecks()
+    total += try runDiagnosticChecks()
+    total += try await runStagingRetentionChecks()
+    total += try runConfigurationLimitChecks()
     print("PASS: \(total) core fixture checks; real Finder, TCC, signing and multi-volume checks remain separate.")
 } catch {
     fputs("FAIL: \(error)\n", stderr)

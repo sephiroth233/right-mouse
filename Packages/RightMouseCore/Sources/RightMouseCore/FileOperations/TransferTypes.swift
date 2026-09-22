@@ -46,9 +46,10 @@ public struct TransferItemResult: Codable, Sendable {
     public let destination: URL?
     public let status: TransferItemStatus
     public let message: String
+    public let failure: CommandFailure?
     public let undoToken: TransferUndoToken?
-    public init(itemID: UUID = UUID(), operationID: UUID? = nil, source: URL, destination: URL? = nil, status: TransferItemStatus, message: String, undoToken: TransferUndoToken? = nil) {
-        self.itemID = itemID; self.operationID = operationID; self.source = source; self.destination = destination; self.status = status; self.message = message; self.undoToken = undoToken
+    public init(itemID: UUID = UUID(), operationID: UUID? = nil, source: URL, destination: URL? = nil, status: TransferItemStatus, message: String, failure: CommandFailure? = nil, undoToken: TransferUndoToken? = nil) {
+        self.itemID = itemID; self.operationID = operationID; self.source = source; self.destination = destination; self.status = status; self.message = message; self.failure = failure; self.undoToken = undoToken
     }
 }
 

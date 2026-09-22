@@ -22,21 +22,28 @@ public actor FileTransferEngine {
                          resolveConflict: (@Sendable (URL, URL) async -> TransferConflictDecision)? = nil,
                          operationID: UUID = UUID()) async -> TransferResult {
         guard !running else {
-            return TransferResult(operationID: operationID, items: sources.map { .init(operationID: operationID, source: $0, status: .failed, message: "另一个文件操作正在进行，请稍后重试。") })
+            let failure = CommandFailure(.ioFailed, "另一个文件操作正在进行，请稍后重试。", retryable: true)
+            return TransferResult(operationID: operationID, items: sources.map { .init(operationID: operationID, source: $0, status: .failed, message: failure.message, failure: failure) })
         }
         running = true
         journalFailed = false
         defer { running = false }
         var results: [TransferItemResult] = []
         let destinationDirectory = target.resolvingSymlinksInPath().standardizedFileURL
+        let targetIdentity: TransferFileIdentity
+        do { targetIdentity = try TransferFileSystem.identity(destinationDirectory) }
+        catch {
+            let failure = TransferFailureMapping.failure(for: error, context: .destination)
+            return TransferResult(operationID: operationID, items: sources.map { .init(operationID: operationID, source: $0, status: .failed, message: failure.message, failure: failure) })
+        }
         do {
-            let targetIdentity = try TransferFileSystem.identity(destinationDirectory)
             guard !sources.isEmpty, sources.count <= 1024, target.isFileURL,
                   targetIdentity.kind == S_IFDIR else { throw TransferEngineError.invalidTarget }
             try PrivateFileIO.ensureDirectory(journalDirectory)
             for rawSource in sources {
                 if !rawSource.isFileURL {
-                    results.append(.init(source: rawSource, status: .failed, message: TransferEngineError.invalidSource.localizedDescription))
+                    let failure = TransferFailureMapping.failure(for: TransferEngineError.invalidSource)
+                    results.append(.init(operationID: operationID, source: rawSource, status: .failed, message: failure.message, failure: failure))
                     continue
                 }
                 // Resolve parents, keeping the selected symbolic link itself intact.
@@ -46,7 +53,8 @@ public actor FileTransferEngine {
                 onProgress?(TransferProgress(operationID: operationID, completedItems: results.count, totalItems: sources.count, phase: result.status.rawValue, bytesProcessed: 0))
             }
         } catch {
-            results = sources.map { .init(operationID: operationID, source: $0, status: .failed, message: error.localizedDescription) }
+            let failure = TransferFailureMapping.failure(for: error)
+            results = sources.map { .init(operationID: operationID, source: $0, status: .failed, message: failure.message, failure: failure) }
         }
         return TransferResult(operationID: operationID, items: results)
     }
@@ -134,6 +142,7 @@ public actor FileTransferEngine {
                     switch decision {
                     case .skip:
                         try cleanStaging(stagingContainer)
+                        record.stagingURL = nil
                         return try finish(&record, .init(itemID: record.itemID, operationID: operationID, source: source, destination: destination, status: .skipped, message: "提交时目标被占用，已跳过。"))
                     case .cancel: cancellation.cancel(); throw TransferEngineError.cancelled
                     case .keepBoth: destination = nextCandidate(source.lastPathComponent, in: target)
@@ -157,6 +166,7 @@ public actor FileTransferEngine {
                 record.phase = "sourceRemoved"; try save(record)
             }
             try cleanStaging(stagingContainer)
+            record.stagingURL = nil
             let undo = mode == .move && sameVolume ? TransferUndoToken(originalURL: source, currentURL: destination, identity: try TransferFileSystem.identity(destination), contentFingerprint: try TransferFileSystem.fingerprint(TransferFileSystem.manifest(destination, cancellation: TransferCancellation()))) : nil
             return try finish(&record, .init(itemID: record.itemID, operationID: operationID, source: source, destination: destination, status: .completed, message: mode == .move ? "移动完成。" : "复制完成。", undoToken: undo))
         } catch {
@@ -166,16 +176,29 @@ public actor FileTransferEngine {
             } else if let engineError = error as? TransferEngineError, case .cancelled = engineError { status = .cancelled }
             else { status = .failed }
             // Pre-commit staging is private to this item. Retain it whenever cleanup cannot be verified.
-            if !committed { try? cleanStaging(stagingContainer) }
+            if !committed {
+                do { try cleanStaging(stagingContainer); record.stagingURL = nil }
+                catch { /* Preserve the staging reference until ownership and cleanup can be verified. */ }
+            }
+            let failure = TransferFailureMapping.conservativeFailure(for: error, status: status, committed: committed)
             let result = TransferItemResult(itemID: record.itemID, operationID: operationID, source: source, destination: committed ? destination : nil, status: status,
-                                            message: committed ? "目标已提交；\(error.localizedDescription) 请核对操作记录。" : error.localizedDescription)
+                                            message: failure.message, failure: failure)
             do { return try finish(&record, result) }
-            catch { return .init(itemID: record.itemID, operationID: operationID, source: source, destination: committed ? destination : nil, status: committed ? .needsReview : .failed, message: "操作记录写入失败，停止后续副作用。请核对来源和目标。") }
+            catch {
+                let journalFailure = CommandFailure(.recoveryRequired, "操作记录写入失败，停止后续副作用。请核对来源和目标。")
+                return .init(itemID: record.itemID, operationID: operationID, source: source, destination: committed ? destination : nil,
+                             status: committed ? .needsReview : .failed, message: journalFailure.message, failure: journalFailure)
+            }
         }
     }
 
     private func checkTargetIdentity(_ url: URL, expected: TransferFileIdentity) throws {
-        let current = try TransferFileSystem.identity(url)
+        let current: TransferFileIdentity
+        do { current = try TransferFileSystem.identity(url) }
+        catch let error as TransferEngineError {
+            if case .system(let code) = error, code == ENOENT { throw TransferEngineError.invalidTarget }
+            throw error
+        }
         guard current.device == expected.device, current.inode == expected.inode, current.kind == expected.kind else {
             throw TransferEngineError.invalidTarget
         }

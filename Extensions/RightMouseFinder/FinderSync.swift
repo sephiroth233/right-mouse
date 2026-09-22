@@ -65,7 +65,7 @@ final class FinderSync: FIFinderSync {
             let file = paths.configurationDirectory.appendingPathComponent("configuration.json")
             let config: AppConfiguration
             if FileManager.default.fileExists(atPath: file.path) {
-                let data = try PrivateFileIO.read(file, maximumBytes: 2 * 1024 * 1024)
+                let data = try PrivateFileIO.read(file, maximumBytes: ConfigurationStore.maximumBytes)
                 config = try JSONDecoder().decode(AppConfiguration.self, from: data)
                 try config.validate()
             } else { config = AppConfiguration() }

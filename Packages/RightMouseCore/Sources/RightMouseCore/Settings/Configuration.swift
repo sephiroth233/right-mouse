@@ -123,6 +123,8 @@ public enum ConfigurationError: LocalizedError {
 
 /// Host-owned store. A future schema is never replaced with defaults.
 public final class ConfigurationStore {
+    /// Shared contract for host persistence and Finder read-only configuration snapshots.
+    public static let maximumBytes = 8 * 1024 * 1024
     public let directory: URL
     public var fileURL: URL { directory.appendingPathComponent("configuration.json") }
     public private(set) var lastWarning: String?
@@ -132,7 +134,7 @@ public final class ConfigurationStore {
         lock.lock(); defer { lock.unlock() }
         lastWarning = nil
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return AppConfiguration() }
-        let data = try PrivateFileIO.read(fileURL, maximumBytes: 8 * 1024 * 1024)
+        let data = try PrivateFileIO.read(fileURL, maximumBytes: Self.maximumBytes)
         // Probe the version before decoding other fields: newer formats may remove them.
         if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let version = object["schemaVersion"] as? Int, version != 1 {
             throw ConfigurationError.futureVersion(version)
@@ -159,7 +161,7 @@ public final class ConfigurationStore {
         value.revision = max(current.revision, value.revision) + 1
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(value)
-        guard data.count <= 8 * 1024 * 1024 else { throw ConfigurationError.invalid("配置超过 8 MiB 存储上限，原配置已保留。请减少模板或目录记录。") }
+        guard data.count <= Self.maximumBytes else { throw ConfigurationError.invalid("配置超过 8 MiB 存储上限，原配置已保留。请减少模板或目录记录。") }
         try PrivateFileIO.write(data, to: fileURL)
         return value
     }
