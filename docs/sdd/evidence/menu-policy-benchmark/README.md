@@ -4,6 +4,14 @@
 
 **这些结果只证明纯规则计算耗时。AC-027 的真实 Finder 回调、原生 NSMenu 构造、系统菜单弹出和后台 I/O 验收尚未完成；不得将本报告作为 AC-027 或完整 NFR-002 通过证据。**
 
+## 目录
+
+- [固定源码快照结果](#固定源码快照结果)
+- [配置与计时口径](#配置与计时口径)
+- [环境与复现](#环境与复现)
+- [验收边界](#验收边界)
+- [参考](#参考)
+
 ## 固定源码快照结果
 
 | 场景 | 样本 | 实际生成节点 | 首次调用 ms | 中位数 ms | 全部样本 P95 ms | 最大值 ms | 后续 99 次 P95 ms |
@@ -63,3 +71,10 @@ bash scripts/benchmark-menu-policy.sh docs/sdd/evidence/menu-policy-benchmark/<�
 ## 验收边界
 
 本次三个场景的纯规则 P95 都小于 50 ms，但不能从中推出完整 Finder 菜单构建也达到 50 ms。真实验收还需要签名可用的 Finder 扩展、NSMenu 实体构造计时、Finder 回调场景、菜单弹出时延和后台 I/O 证据。源码可见该规则没有递归文件遍历、哈希或下载调用，本次没有另外运行系统 I/O 追踪工具，因此不声称完成整个扩展进程的后台 I/O 验证。
+
+## 参考
+
+- [实际规则实现](../../../../Packages/RightMouseCore/Sources/RightMouseCore/Menu/MenuPolicy.swift)
+- [基准程序](../../../../tools/MenuPolicyBenchmark/main.swift)
+- [独立编译与采样脚本](../../../../scripts/benchmark-menu-policy.sh)
+- [AC-027 验收定义](../../../../specs/001-finder-core/checklists/acceptance.md)

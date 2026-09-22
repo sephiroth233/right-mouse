@@ -53,7 +53,7 @@ struct RightMouseHostCheck {
             print("PASS host: \(name)")
         }
 
-        let host = try HostController()
+        let host = try HostController(storagePaths: paths)
         _ = host.model.save { $0.revealCreatedFile = false; $0.conflictPolicy = "skip" }
         try check(host.model.tasks.contains(where: { $0.id == recoveryRequest.requestID && $0.status == "需要核对" }),
                   "startup restores an accepted request as needsReview")

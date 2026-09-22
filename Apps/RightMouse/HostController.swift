@@ -25,14 +25,16 @@ import Darwin
     private let moveType = NSPasteboard.PasteboardType("cn.rightmouse.pending-move")
     var showTasks: (() -> Void)?
 
-    init() throws {
-        paths = try SharedPaths.resolve(); try paths.prepare()
+    init(storagePaths: SharedPaths? = nil) throws {
+        if let storagePaths { paths = storagePaths; try paths.prepare() }
+        else { paths = try SharedPaths.resolveAndPrepare() }
         model = AppModel(configurationStore: ConfigurationStore(directory: paths.configurationDirectory), templateStore: TemplateStore(directory: paths.templatesDirectory))
         ledger = try CommandLedger(directory: paths.operationsDirectory.appendingPathComponent("Commands"))
         inbox = InboxStore(directory: paths.inboxDirectory)
         engine = FileTransferEngine(journalDirectory: paths.operationsDirectory.appendingPathComponent("Transfers"))
         followups = TaskFollowupStore(directory: paths.operationsDirectory.appendingPathComponent("Followups"))
-        if paths.isDevelopmentFallback { model.notice = "开发模式：应用操作可用，Finder 共享容器与签名仍需验证。" }
+        model.isDevelopmentStorage = paths.isDevelopmentFallback
+        model.storageDiagnostic = paths.developmentDiagnostic
         model.onPerformAction = { [weak self] action, files, target in self?.perform(action, files: files, destination: target) }
         model.onConfigurationChanged = { _ in DistributedNotificationCenter.default().postNotificationName(Notification.Name("cn.rightmouse.configurationChanged"), object: nil, deliverImmediately: true) }
         model.onCancelTask = { [weak self] id in self?.cancellations[id]?.cancel() }

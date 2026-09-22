@@ -57,6 +57,8 @@ struct TaskPresentation: Identifiable {
     @Published var tasks: [TaskPresentation] = []
     @Published var errorMessage: String?
     @Published var notice: String?
+    @Published var isDevelopmentStorage = false
+    @Published var storageDiagnostic: String?
     @Published var isReadOnly = false
     @Published var extensionEnabled = false
     @Published var selectedFiles: [URL] = []
@@ -219,7 +221,7 @@ struct TaskPresentation: Identifiable {
     func refreshDiagnostics() { extensionEnabled = FIFinderSyncController.isExtensionEnabled }
     func showExtensionSettings() { FIFinderSyncController.showExtensionManagementInterface() }
     func copyDiagnostics() {
-        let summary = "RightMouse 开发版\n系统：\(ProcessInfo.processInfo.operatingSystemVersionString)\nFinder 扩展：\(extensionEnabled ? "已启用" : "未启用")\n配置版本：\(configuration.schemaVersion) / \(configuration.revision)\n监控目录：\(configuration.watchedLocations.count)\n任务数量：\(tasks.count)\n只读配置：\(isReadOnly ? "是" : "否")\n此摘要不包含用户文件路径、内容或书签。"
+        let summary = "RightMouse 开发版\n系统：\(ProcessInfo.processInfo.operatingSystemVersionString)\n存储模式：\(isDevelopmentStorage ? "独立开发目录；Finder 右键功能不可用" : "共享容器")\nFinder 扩展登记：\(extensionEnabled ? "已启用" : "未启用")\n配置版本：\(configuration.schemaVersion) / \(configuration.revision)\n监控目录：\(configuration.watchedLocations.count)\n任务数量：\(tasks.count)\n只读配置：\(isReadOnly ? "是" : "否")\n此摘要不包含用户文件路径、内容或书签。"
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(summary, forType: .string)
         notice = "诊断摘要已复制。"
     }

@@ -59,8 +59,8 @@ struct RootView: View {
                         }
                     }.padding(.horizontal, 10)
                 }
-                Label(model.extensionEnabled ? "扩展已启用" : "等待启用扩展", systemImage: model.extensionEnabled ? "checkmark.circle.fill" : "circle.dashed")
-                    .font(.caption).foregroundStyle(model.extensionEnabled ? .green : .secondary)
+                Label(model.isDevelopmentStorage ? "开发模式，Finder 不可用" : (model.extensionEnabled ? "扩展已启用" : "等待启用扩展"), systemImage: model.isDevelopmentStorage ? "exclamationmark.triangle" : (model.extensionEnabled ? "checkmark.circle.fill" : "circle.dashed"))
+                    .font(.caption).foregroundStyle(model.isDevelopmentStorage ? .orange : (model.extensionEnabled ? .green : .secondary))
                     .padding(.horizontal, 16).padding(.bottom, 16)
             }.frame(width: 204).rightMouseGlass(radius: 22)
             VStack(alignment: .leading, spacing: 0) {
@@ -69,6 +69,12 @@ struct RootView: View {
                     Text(current.rawValue).font(.system(size: 27, weight: .semibold, design: .rounded))
                     Text(current.subtitle).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }.padding(24)
+                if model.isDevelopmentStorage {
+                    Label("开发模式 · Finder 菜单暂不可用。可在文件操作台使用本地功能。", systemImage: "exclamationmark.triangle")
+                        .font(.callout).fixedSize(horizontal: false, vertical: true)
+                        .padding(12).background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+                        .padding(.horizontal, 24).padding(.bottom, 12)
+                }
                 if let notice = model.notice {
                     HStack { Image(systemName: "info.circle"); Text(notice).font(.callout); Spacer(); Button { model.notice = nil } label: { Image(systemName: "xmark") }.buttonStyle(.plain).accessibilityLabel("关闭提示") }
                         .padding(12).background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 12)).padding(.horizontal, 24).padding(.bottom, 12)
@@ -108,7 +114,7 @@ private struct GeneralSettingsView: View {
     var body: some View {
         Form {
             Section("开始使用") {
-                SetupStep(number: 1, title: "启用 Finder 扩展", subtitle: model.extensionEnabled ? "扩展已启用，可继续选择覆盖目录。" : "在系统设置中启用 RightMouse Finder 扩展。", complete: model.extensionEnabled) { model.showExtensionSettings() }
+                SetupStep(number: 1, title: "启用 Finder 扩展", subtitle: model.isDevelopmentStorage ? (model.extensionEnabled ? "扩展已登记，但共享通信不可用。" : "开发模式下共享通信不可用，Finder 菜单暂不可用。") : (model.extensionEnabled ? "扩展已启用，可继续选择覆盖目录。" : "在系统设置中启用 RightMouse Finder 扩展。"), complete: !model.isDevelopmentStorage && model.extensionEnabled) { model.showExtensionSettings() }
                 SetupStep(number: 2, title: "选择使用目录", subtitle: "已配置 \(model.configuration.watchedLocations.count) 个目录；子文件夹一并覆盖。", complete: !model.configuration.watchedLocations.isEmpty) { navigate(.diagnostics) }
                 SetupStep(number: 3, title: "定制右键菜单", subtitle: "新建文件、复制路径、剪切移动与打开方式。", complete: false) { navigate(.menus) }
             }
@@ -169,8 +175,8 @@ private struct DiagnosticsSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 GroupBox {
-                    HStack { Label(model.extensionEnabled ? "Finder 扩展已启用" : "Finder 扩展未启用", systemImage: model.extensionEnabled ? "checkmark.circle.fill" : "exclamationmark.circle").foregroundStyle(model.extensionEnabled ? .green : .orange); Spacer(); Button("打开扩展设置") { model.showExtensionSettings() }; Button("刷新") { model.refreshDiagnostics() } }
-                    Text("启用后，在下方配置的普通本地目录中打开 Finder 右键菜单。云盘位置的实际支持以系统与提供方验证结果为准。").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
+                    HStack { Label(model.isDevelopmentStorage ? "开发模式：Finder 功能不可用" : (model.extensionEnabled ? "Finder 扩展已启用" : "Finder 扩展未启用"), systemImage: !model.isDevelopmentStorage && model.extensionEnabled ? "checkmark.circle.fill" : "exclamationmark.circle").foregroundStyle(!model.isDevelopmentStorage && model.extensionEnabled ? .green : .orange); Spacer(); Button("打开扩展设置") { model.showExtensionSettings() }; Button("刷新") { model.refreshDiagnostics() } }
+                    Text(model.storageDiagnostic ?? "启用后，在下方配置的普通本地目录中打开 Finder 右键菜单。云盘位置的实际支持以系统与提供方验证结果为准。").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
                 }
                 Text("右键菜单覆盖目录").font(.headline)
                 LocationSettingsView(model: model, watched: true)

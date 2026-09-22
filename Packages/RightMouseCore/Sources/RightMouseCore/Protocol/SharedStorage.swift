@@ -3,29 +3,109 @@ import CryptoKit
 import Darwin
 
 public struct SharedPaths: Sendable {
+    public enum DevelopmentReason: String, Sendable {
+        case explicitDirectory, sharedContainerUnavailable, sharedContainerUnwritable
+    }
+    /// Explicit inputs let fixture tests exercise permission failures without writing
+    /// into a user's App Group or changing any system authorization.
+    public struct ResolutionEnvironment: Sendable {
+        public var appGroup: String
+        public var isExtension: Bool
+        public var allowsDevelopmentFallback: Bool
+        public var developmentDirectory: String?
+        public init(appGroup: String, isExtension: Bool, allowsDevelopmentFallback: Bool, developmentDirectory: String? = nil) {
+            self.appGroup = appGroup; self.isExtension = isExtension
+            self.allowsDevelopmentFallback = allowsDevelopmentFallback; self.developmentDirectory = developmentDirectory
+        }
+        public static var current: Self {
+            Self(appGroup: Bundle.main.object(forInfoDictionaryKey: "RightMouseAppGroup") as? String ?? "group.cn.rightmouse.shared",
+                 isExtension: Bundle.main.bundleURL.pathExtension == "appex",
+                 allowsDevelopmentFallback: Bundle.main.object(forInfoDictionaryKey: "RightMouseAllowDevelopmentStorageFallback") as? Bool == true,
+                 developmentDirectory: ProcessInfo.processInfo.environment["RIGHTMOUSE_DATA_DIR"])
+        }
+    }
     public let root: URL
     public let isDevelopmentFallback: Bool
+    public let developmentReason: DevelopmentReason?
     public var configurationDirectory: URL { root.appendingPathComponent("Configuration", isDirectory: true) }
     public var templatesDirectory: URL { root.appendingPathComponent("Templates", isDirectory: true) }
     public var operationsDirectory: URL { root.appendingPathComponent("Operations", isDirectory: true) }
     public var inboxDirectory: URL { root.appendingPathComponent("Inbox", isDirectory: true) }
     public var receiptsDirectory: URL { root.appendingPathComponent("Receipts", isDirectory: true) }
     public var pendingMoveURL: URL { root.appendingPathComponent("pending-move.json") }
-    public init(root: URL, isDevelopmentFallback: Bool = false) { self.root = root; self.isDevelopmentFallback = isDevelopmentFallback }
+    public var developmentDiagnostic: String? {
+        guard isDevelopmentFallback else { return nil }
+        let reason: String
+        switch developmentReason {
+        case .explicitDirectory: reason = "已指定开发测试目录。"
+        case .sharedContainerUnavailable: reason = "共享容器尚不可用，已切换到独立的本地开发目录。"
+        case .sharedContainerUnwritable: reason = "共享容器无法写入，已切换到独立的本地开发目录。"
+        case nil: reason = "正在使用独立的本地开发目录。"
+        }
+        return "开发模式：\(reason)应用内文件操作可用，Finder 右键功能不可用。完成宿主与扩展的 App Group 签名配置后，再验证 Finder 功能。"
+    }
+    public init(root: URL, isDevelopmentFallback: Bool = false, developmentReason: DevelopmentReason? = nil) {
+        self.root = root; self.isDevelopmentFallback = isDevelopmentFallback; self.developmentReason = developmentReason
+    }
+    /// Read-only path selection used by the Finder extension. It never probes or
+    /// creates host storage, and extensions never accept a development override.
     public static func resolve() throws -> SharedPaths {
-        if let override = ProcessInfo.processInfo.environment["RIGHTMOUSE_DATA_DIR"], !override.isEmpty {
-            return SharedPaths(root: URL(fileURLWithPath: override, isDirectory: true), isDevelopmentFallback: true)
+        try resolveAndPrepare(environment: .current,
+            groupContainer: { FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: $0) },
+            applicationSupport: applicationSupportDirectory,
+            prepare: { _ in })
+    }
+    /// Host startup verifies actual access: macOS can return a group URL even when
+    /// it will reject the subsequent write. Only flagged development hosts degrade.
+    public static func resolveAndPrepare() throws -> SharedPaths {
+        try resolveAndPrepare(environment: .current,
+            groupContainer: { FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: $0) },
+            applicationSupport: applicationSupportDirectory,
+            prepare: { paths in try paths.prepare(); try paths.verifyWritableStorage() })
+    }
+    public static func resolveAndPrepare(environment: ResolutionEnvironment,
+                                        groupContainer: (String) -> URL?,
+                                        applicationSupport: () throws -> URL,
+                                        prepare: (SharedPaths) throws -> Void) throws -> SharedPaths {
+        let allowLocal = environment.allowsDevelopmentFallback && !environment.isExtension
+        if let override = environment.developmentDirectory, !override.isEmpty {
+            guard allowLocal else { throw CommandFailure(.accessDenied, "当前构建不允许开发数据目录覆盖。Finder 扩展与正式构建必须使用授权共享容器。") }
+            guard override.hasPrefix("/"), !override.contains("\0") else { throw CommandFailure(.invalidRequest, "开发数据目录必须是有效的绝对路径。") }
+            let paths = SharedPaths(root: URL(fileURLWithPath: override, isDirectory: true), isDevelopmentFallback: true, developmentReason: .explicitDirectory)
+            try prepare(paths)
+            return paths
         }
-        let group = Bundle.main.object(forInfoDictionaryKey: "RightMouseAppGroup") as? String ?? "group.cn.rightmouse.shared"
-        if let directory = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) {
-            return SharedPaths(root: directory.appendingPathComponent("RightMouse", isDirectory: true))
+        let fallbackReason: DevelopmentReason
+        if let directory = groupContainer(environment.appGroup) {
+            let shared = SharedPaths(root: directory.appendingPathComponent("RightMouse", isDirectory: true))
+            do { try prepare(shared); return shared }
+            catch {
+                guard allowLocal else { throw error }
+                fallbackReason = .sharedContainerUnwritable
+            }
+        } else {
+            guard allowLocal else { throw CommandFailure(.accessDenied, "无法访问共享容器，请检查宿主与 Finder 扩展的签名和 App Group 配置。") }
+            fallbackReason = .sharedContainerUnavailable
         }
-        if Bundle.main.bundleURL.pathExtension == "appex" { throw CommandFailure(.accessDenied, "Finder 扩展无法访问共享容器，请检查签名与 App Group 配置") }
-        let library = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-        return SharedPaths(root: library.appendingPathComponent("RightMouse", isDirectory: true), isDevelopmentFallback: true)
+        let local = try applicationSupport().appendingPathComponent("RightMouse-Development", isDirectory: true)
+        let paths = SharedPaths(root: local, isDevelopmentFallback: true, developmentReason: fallbackReason)
+        try prepare(paths)
+        return paths
+    }
+    private static func applicationSupportDirectory() throws -> URL {
+        try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
     }
     public func prepare() throws {
         for url in [root,configurationDirectory,templatesDirectory,operationsDirectory,inboxDirectory,receiptsDirectory] { try PrivateFileIO.ensureDirectory(url) }
+    }
+    private func verifyWritableStorage() throws {
+        let marker = UUID().uuidString
+        let probe = root.appendingPathComponent(".storage-probe-" + marker)
+        defer { try? FileManager.default.removeItem(at: probe) }
+        let data = Data(marker.utf8)
+        try PrivateFileIO.write(data, to: probe, replace: false)
+        guard try PrivateFileIO.read(probe, maximumBytes: 128) == data else { throw CommandFailure(.ioFailed, "应用数据目录读写校验失败。") }
+        try FileManager.default.removeItem(at: probe)
     }
 }
 

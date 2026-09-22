@@ -41,7 +41,7 @@ private struct FollowupCheckFailure: Error, CustomStringConvertible {
         try PrivateFileIO.read(paths.receiptsDirectory.appendingPathComponent(id.uuidString + ".json"))
     }
     func newHost() throws -> HostController {
-        let host = try HostController()
+        let host = try HostController(storagePaths: paths)
         guard host.model.save({ $0.revealCreatedFile = false; $0.conflictPolicy = "keepBoth" }) else {
             throw FollowupCheckFailure(description: "could not configure fixture host")
         }

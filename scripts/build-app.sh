@@ -133,7 +133,9 @@ def embed(root, build, app):
     for label, bundle, name, bundle_id in locations:
         contents = bundle/'Contents'
         raw = (root/'Config'/name).read_text().replace('$(PRODUCT_BUNDLE_IDENTIFIER)', bundle_id).replace('$(RIGHTMOUSE_APP_GROUP)', metadata['group'])
-        (contents/'Info.plist').write_bytes(plistlib.dumps(plistlib.loads(raw.encode())))
+        info = plistlib.loads(raw.encode())
+        info['RightMouseAllowDevelopmentStorageFallback'] = label == 'host' and metadata['identity'] == '-' and metadata['mode'] == 'development'
+        (contents/'Info.plist').write_bytes(plistlib.dumps(info))
         target = contents/'embedded.provisionprofile'
         # Always remove an older embedded profile before the current build is signed.
         if target.exists() or target.is_symlink(): target.unlink()
@@ -147,6 +149,11 @@ def verify(build, app):
     metadata = json.loads((build/'signing-inputs/metadata.json').read_text())
     teams = []
     for label, bundle, name in [('host', app, 'RightMouse.entitlements'), ('extension', app/'Contents/PlugIns/RightMouseFinder.appex', 'FinderExtension.entitlements')]:
+        info = plistlib.loads((bundle/'Contents/Info.plist').read_bytes())
+        fallback_flag = info.get('RightMouseAllowDevelopmentStorageFallback')
+        expected_fallback = label == 'host' and metadata['identity'] == '-' and metadata['mode'] == 'development'
+        if not isinstance(fallback_flag, bool) or fallback_flag != expected_fallback:
+            fail(label + ' development storage flag does not match its signing mode.')
         actual_data = run(['/usr/bin/codesign', '-d', '--entitlements', '-', '--xml', str(bundle)]).stdout
         try: actual = plistlib.loads(actual_data)
         except Exception: fail(label + ' signed entitlements could not be decoded.')
