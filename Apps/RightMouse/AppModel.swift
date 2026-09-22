@@ -23,6 +23,7 @@ struct TaskReviewItemPresentation: Identifiable {
     var destination: URL? = nil
     var sourceObservation: String = "未检查"
     var destinationObservation: String = "未检查"
+    var staging: StagingRecoveryItem? = nil
 }
 
 /// The host supplies a fresh, read-only inspection of known operation records.
@@ -52,6 +53,10 @@ struct TaskPresentation: Identifiable {
     var canReview: Bool = false
 }
 
+enum SetupExercisePhase: Equatable {
+    case idle, ready, waiting, succeeded, failed, needsReview
+}
+
 @MainActor final class AppModel: ObservableObject {
     @Published var configuration: AppConfiguration
     @Published var tasks: [TaskPresentation] = []
@@ -69,6 +74,13 @@ struct TaskPresentation: Identifiable {
     @Published var taskReview: TaskReviewPresentation?
     @Published var reviewError: String?
     @Published var isConfirmingReview = false
+    @Published private(set) var isCleaningStaging = false
+    @Published private(set) var setupExercisePhase: SetupExercisePhase = .idle
+    @Published private(set) var setupExerciseTarget: URL?
+    @Published private(set) var setupExerciseRequestID: UUID?
+    @Published private(set) var setupExerciseResult: URL?
+    @Published private(set) var setupExerciseMessage = "选择演练目录，再创建一个 TXT 文件来验证文件操作。"
+    private var setupExerciseReceiptRevision = 0
     let configurationStore: ConfigurationStore
     let templateStore: TemplateStore
     var onConfigurationChanged: ((AppConfiguration) -> Void)?
@@ -78,8 +90,12 @@ struct TaskPresentation: Identifiable {
     var onRetryTask: ((UUID) -> Void)?
     var onReviewTask: ((UUID) -> Void)?
     var onConfirmReviewTask: ((UUID) async throws -> Void)?
+    var onCleanupStaging: ((StagingCleanupToken) -> Void)?
     var onOpenLocation: ((URL) -> Void)?
     var onExportDiagnostics: (() throws -> DiagnosticLogExport)?
+    /// Request ID is installed before dispatch, so synchronous accepted receipts
+    /// cannot race callback return. The host remains the sole file creator.
+    var onRunSetupExercise: ((URL, UUID) -> Bool)?
 
     init(configurationStore: ConfigurationStore, templateStore: TemplateStore) {
         self.configurationStore = configurationStore; self.templateStore = templateStore
@@ -93,23 +109,88 @@ struct TaskPresentation: Identifiable {
         }
         refreshDiagnostics()
     }
+    func chooseSetupExerciseDirectory() {
+        guard !isReadOnly, setupExercisePhase != .waiting else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
+        panel.title = "选择 TXT 演练目录"
+        panel.message = "选择后会先显示目标位置；点击“创建演练 TXT”才会创建文件。"
+        acceptSetupExerciseSelection(panel.runModal() == .OK ? panel.url : nil)
+    }
+    /// Only called with an accepted system-picker selection; nil models cancel.
+    func acceptSetupExerciseSelection(_ url: URL?) {
+        guard !isReadOnly, setupExercisePhase != .waiting, let url else { return }
+        guard url.isFileURL else { setupExerciseMessage = "请选择本地目录。"; return }
+        setupExerciseTarget = url; setupExerciseResult = nil; setupExerciseRequestID = nil
+        setupExercisePhase = .ready
+        setupExerciseMessage = "演练目录已选择。创建权限会在实际任务中验证；现有同名文件会被保留。"
+    }
+    @discardableResult func beginSetupExercise(at url: URL) -> Bool {
+        guard !isReadOnly, setupExercisePhase != .waiting else { return false }
+        guard url.isFileURL, (url.host ?? "").isEmpty, url.query == nil, url.fragment == nil else {
+            setupExercisePhase = .failed; setupExerciseMessage = "演练目标必须是本地目录。"; return false
+        }
+        guard let onRunSetupExercise else {
+            setupExercisePhase = .failed; setupExerciseMessage = "创建服务未连接，请重新打开应用。"; return false
+        }
+        let id = UUID()
+        setupExerciseTarget = url; setupExerciseRequestID = id; setupExerciseResult = nil
+        setupExerciseReceiptRevision = 0; setupExercisePhase = .waiting
+        setupExerciseMessage = "正在连接或等待创建结果。关闭设置窗口不会重新创建文件。"
+        let accepted = onRunSetupExercise(url, id)
+        if !accepted, setupExercisePhase == .waiting {
+            setupExercisePhase = .failed
+            setupExerciseMessage = "创建请求未被接受。请检查任务提示后重试；尚未确认创建成功。"
+        }
+        return accepted
+    }
+    func receiveSetupReceipt(_ receipt: CommandReceipt) {
+        guard receipt.requestID == setupExerciseRequestID, receipt.schemaVersion == 1,
+              setupExercisePhase == .waiting, receipt.revision > setupExerciseReceiptRevision else { return }
+        setupExerciseReceiptRevision = receipt.revision
+        switch receipt.status {
+        case .accepted, .planning, .running, .waitingForUser, .cancelling:
+            setupExerciseMessage = receipt.status == .waitingForUser ? "创建任务正在等待你处理，请查看任务窗口。" : "正在连接或等待创建结果。以实际任务回执确认完成。"
+        case .completed:
+            guard receipt.error == nil, receipt.itemResults.count == 1,
+                  let item = receipt.itemResults.first, item.status == "success", item.error == nil,
+                  let url = item.destinationURL, url.isFileURL, (url.host ?? "").isEmpty,
+                  url.query == nil, url.fragment == nil else {
+                setupExercisePhase = .needsReview
+                setupExerciseMessage = "任务已结束，但缺少明确的新建成功记录。请在任务窗口核对，不能确认演练成功。"
+                return
+            }
+            setupExerciseResult = url; setupExercisePhase = .succeeded
+            setupExerciseMessage = "TXT 创建演练成功。下面显示任务实际创建的文件，可在 Finder 中定位。"
+        case .needsReview, .partial:
+            setupExercisePhase = .needsReview
+            setupExerciseMessage = receipt.error?.message ?? "创建结果需要核对。请查看任务记录，确认已有结果后再重新演练。"
+        case .failed, .rejected, .cancelled:
+            setupExercisePhase = .failed
+            setupExerciseMessage = receipt.error?.message ?? (receipt.status == .cancelled ? "演练已取消，未确认创建成功。" : "演练创建失败，请检查目录权限后重试。")
+        }
+    }
+    func revealSetupExerciseResult() {
+        guard setupExercisePhase == .succeeded, let setupExerciseResult else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([setupExerciseResult])
+    }
     func updateTask(_ task: TaskPresentation) {
         if let index = tasks.firstIndex(where: { $0.id == task.id }) { tasks[index] = task }
         else { tasks.insert(task, at: 0) }
     }
     func showReview(_ review: TaskReviewPresentation) {
-        guard !isConfirmingReview else { return }
+        guard !isConfirmingReview, !isCleaningStaging else { return }
         reviewError = nil
         taskReview = review
     }
     func refreshReview() {
-        guard let review = taskReview, !isConfirmingReview else { return }
+        guard let review = taskReview, !isConfirmingReview, !isCleaningStaging else { return }
         guard let onReviewTask else { reviewError = "任务核对服务未连接，请重新打开应用。"; return }
         reviewError = nil
         onReviewTask(review.id)
     }
     func confirmReview() async {
-        guard let review = taskReview, review.canConfirm, !isConfirmingReview else { return }
+        guard let review = taskReview, review.canConfirm, !isConfirmingReview, !isCleaningStaging else { return }
         guard let onConfirmReviewTask else { reviewError = "无法保存核对记录：任务服务未连接。"; return }
         isConfirmingReview = true
         defer { isConfirmingReview = false }
@@ -118,6 +199,34 @@ struct TaskPresentation: Identifiable {
             if taskReview?.id == review.id { taskReview = nil }
             notice = "已保存人工核对记录。任务原有结果和文件均已保留。"
         } catch { reviewError = "核对记录未保存：\(error.localizedDescription)" }
+    }
+    /// Called only after explicit user confirmation; the host rechecks ownership
+    /// and authorization immediately before any deletion.
+    @discardableResult func beginStagingCleanup(_ token: StagingCleanupToken) -> Bool {
+        guard !isCleaningStaging, !isConfirmingReview else { return false }
+        guard !isReadOnly else { reviewError = "当前配置为只读，不能清理暂存。"; return false }
+        guard let review = taskReview, review.id == token.operationID,
+              let item = review.items.first(where: { $0.id == token.itemID }), let staging = item.staging,
+              staging.operationID == token.operationID, staging.itemID == token.itemID,
+              case .cleanupAllowed(let expected) = staging.disposition,
+              expected.operationID == token.operationID, expected.itemID == token.itemID,
+              expected.journalURL == token.journalURL, expected.stagingURL == token.stagingURL,
+              expected.stagingIdentity == token.stagingIdentity, expected.parentIdentity == token.parentIdentity,
+              expected.journalDigest == token.journalDigest else {
+            reviewError = "当前暂存没有可用的清理凭据，请重新检查任务。"; return false
+        }
+        guard let onCleanupStaging else { reviewError = "暂存清理服务未连接，请重新打开应用。"; return false }
+        reviewError = nil; notice = nil; isCleaningStaging = true
+        onCleanupStaging(token)
+        return true
+    }
+    /// The host calls this once its cleanup attempt has finished, then requests a
+    /// fresh review. An error never changes the task's result into success.
+    func stagingCleanupFinished(error: String? = nil) {
+        guard isCleaningStaging else { return }
+        isCleaningStaging = false
+        if let error { reviewError = error; notice = nil }
+        else { reviewError = nil; notice = "已清理该任务的暂存副本，来源与已提交目标均保留。" }
     }
     func revealReviewURL(_ url: URL) {
         guard url.isFileURL else { reviewError = "此记录不是本地文件路径。"; return }

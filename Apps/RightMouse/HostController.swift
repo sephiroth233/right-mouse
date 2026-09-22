@@ -11,9 +11,12 @@ import Darwin
     private let engine: FileTransferEngine
     private let followups: TaskFollowupStore
     private let diagnostics: DiagnosticLogStore
-    private enum Work { case command(CommandRequest), undo(UUID) }
+    private let storageMigration: PrivateStorageMigration
+    private let recoveryEvidence: RecoveryEvidenceStore
+    private enum Work { case command(CommandRequest), undo(UUID), cleanupStaging(StagingCleanupToken) }
     private var queue: [Work] = []
     private var queuedUndos: Set<UUID> = []
+    private var queuedStagingCleanups: Set<UUID> = []
     private var worker: Task<Void, Never>?
     private var cancellations: [UUID: TransferCancellation] = [:]
     private var results: [UUID: TransferResult] = [:]
@@ -40,8 +43,11 @@ import Darwin
         self.projectDirectoryPicker = projectDirectoryPicker; self.openApplication = openApplication
         if let storagePaths { paths = storagePaths; try paths.prepare() }
         else { paths = try SharedPaths.resolveAndPrepare() }
-        model = AppModel(configurationStore: ConfigurationStore(directory: paths.configurationDirectory), templateStore: TemplateStore(directory: paths.templatesDirectory))
         ledger = try CommandLedger(directory: paths.operationsDirectory.appendingPathComponent("Commands"))
+        storageMigration = try PrivateStorageMigration(paths: paths)
+        try storageMigration.run()
+        recoveryEvidence = RecoveryEvidenceStore(paths: paths, backupRoot: paths.backupsDirectory)
+        model = AppModel(configurationStore: ConfigurationStore(directory: paths.configurationDirectory), templateStore: TemplateStore(directory: paths.templatesDirectory))
         inbox = InboxStore(directory: paths.inboxDirectory)
         engine = FileTransferEngine(journalDirectory: paths.operationsDirectory.appendingPathComponent("Transfers"))
         followups = TaskFollowupStore(directory: paths.operationsDirectory.appendingPathComponent("Followups"))
@@ -49,17 +55,26 @@ import Darwin
         // Use the OS physical path for this already prepared application root;
         // the diagnostic store then opens every descendant without following links.
         let diagnosticRoot: URL
-        if let physicalPath = realpath(paths.root.path, nil) {
+        if let physicalPath = realpath(paths.privateRoot.path, nil) {
             diagnosticRoot = URL(fileURLWithPath: String(cString: physicalPath), isDirectory: true)
             free(physicalPath)
-        } else { diagnosticRoot = paths.root }
+        } else { diagnosticRoot = paths.privateRoot }
         diagnostics = DiagnosticLogStore(directory: diagnosticRoot.appendingPathComponent("Diagnostics"))
         model.isDevelopmentStorage = paths.isDevelopmentFallback
         model.storageDiagnostic = paths.developmentDiagnostic
         model.onPerformAction = { [weak self] action, files, target in self?.perform(action, files: files, destination: target) }
-        model.onConfigurationChanged = { [weak self] _ in
-            self?.diagnostics.append(component: .configuration, event: .configurationSaved)
-            DistributedNotificationCenter.default().postNotificationName(Notification.Name("cn.rightmouse.configurationChanged"), object: nil, deliverImmediately: true)
+        model.onConfigurationChanged = { [weak self] configuration in
+            guard let self else { return }
+            do {
+                try self.publishMenu(configuration)
+                self.diagnostics.append(component: .configuration, event: .configurationSaved)
+            } catch { self.model.reportError("设置已保存在宿主，但 Finder 菜单快照未能更新：\(error.localizedDescription)") }
+        }
+        model.onRunSetupExercise = { [weak self] directory, id in
+            guard let self else { return false }
+            let target = FileReference(url: directory, kindHint: .directory)
+            let request = CommandRequest(context: ActionContext(entryPoint: .container, container: target, selection: []), action: .createFile(templateID: "txt", destination: target, name: "RightMouse 演练.txt"), requestID: id)
+            return self.submit(request, interactive: true)
         }
         model.onExportDiagnostics = { [weak self] in
             guard let self else { throw CommandFailure(.ioFailed, "诊断服务已退出，请重新打开应用。") }
@@ -69,6 +84,7 @@ import Darwin
         model.onUndoTask = { [weak self] id in self?.enqueueUndo(id) }
         model.onRetryTask = { [weak self] id in self?.retry(id) }
         model.onReviewTask = { [weak self] id in self?.review(id) }
+        model.onCleanupStaging = { [weak self] token in self?.enqueueStagingCleanup(token) }
         model.onConfirmReviewTask = { [weak self] id in
             guard let self else { throw CommandFailure(.recoveryRequired, "任务服务已退出") }
             let directory = self.paths.operationsDirectory.appendingPathComponent("Reviews")
@@ -79,10 +95,25 @@ import Darwin
         try? FileManager.default.removeItem(at: paths.pendingMoveURL)
         diagnostics.append(component: .host, event: .hostStarted)
         diagnostics.append(component: .configuration, event: .configurationLoaded, errorCode: model.isReadOnly ? .recoveryRequired : nil)
-        let retention = OperationRetention(paths: paths, ledger: ledger).prune()
-        model.retentionSummary = "本次启动已清理 \(retention.prunedRequests) 个过期任务，保留 \(retention.retainedRequests) 个任务。" + (retention.issues > 0 ? "有 \(retention.issues) 处记录无法确认安全清理，已保留现场。" : "")
-        if retention.issues > 0 { diagnostics.append(component: .host, event: .recoveryDetected, errorCode: .recoveryRequired) }
+        if model.isReadOnly { model.retentionSummary = "只读诊断模式未执行过期记录清理，原始记录继续保留。" }
+        else {
+            let retention = OperationRetention(paths: paths, ledger: ledger).prune()
+            model.retentionSummary = "本次启动已清理 \(retention.prunedRequests) 个过期任务，保留 \(retention.retainedRequests) 个任务。" + (retention.issues > 0 ? "有 \(retention.issues) 处记录无法确认安全清理，已保留现场。" : "")
+            if retention.issues > 0 { diagnostics.append(component: .host, event: .recoveryDetected, errorCode: .recoveryRequired) }
+        }
+        do { try publishMenu(model.configuration, available: !model.isReadOnly) }
+        catch { model.reportError("Finder 菜单快照不可用：\(error.localizedDescription)") }
         restoreHistory()
+        preserveInvalidFollowups()
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let scan = try await self.engine.scanRecoveryRecords()
+                if !scan.issues.isEmpty {
+                    self.model.notice = "文件恢复记录存在损坏或不兼容内容。" + self.preserveEvidence(scan.issues.map(\.url), category: .transfers)
+                }
+            } catch { self.model.notice = "文件恢复记录扫描未完成，原始记录已保留。" }
+        }
     }
 
     func scanInbox() {
@@ -95,6 +126,7 @@ import Darwin
     }
     @discardableResult func submit(_ request: CommandRequest, interactive: Bool = false) -> Bool {
         do {
+            guard !model.isReadOnly else { throw CommandFailure(.unsupportedVersion, "配置处于只读诊断状态，暂不能执行文件操作。") }
             _ = try RequestValidator.decode(WireCodec.encoder().encode(request))
             let accepted = try ledger.accept(request)
             requests[request.requestID] = request
@@ -132,6 +164,7 @@ import Darwin
                 switch queue.removeFirst() {
                 case .command(let request): await execute(request)
                 case .undo(let id): await undo(id)
+                case .cleanupStaging(let token): await cleanupStaging(token)
                 }
             }
             worker = nil
@@ -468,7 +501,12 @@ import Darwin
     }
     private func invalidatePending() { pending = nil; try? FileManager.default.removeItem(at: paths.pendingMoveURL) }
     private func publish(_ receipt: CommandReceipt) throws {
+        model.receiveSetupReceipt(receipt)
         try PrivateFileIO.write(WireCodec.encoder().encode(receipt), to: paths.receiptsDirectory.appendingPathComponent(receipt.requestID.uuidString + ".json"))
+    }
+    private func publishMenu(_ configuration: AppConfiguration, available: Bool = true) throws {
+        try MenuSnapshotStore(directory: paths.menuDirectory).publish(configuration, available: available)
+        DistributedNotificationCenter.default().postNotificationName(Notification.Name("cn.rightmouse.configurationChanged"), object: nil, deliverImmediately: true)
     }
     private func publishBestEffort(_ receipt: CommandReceipt) {
         do { try publish(receipt) }
@@ -499,7 +537,7 @@ import Darwin
     private func restoreHistory() {
         do {
             let scan = try ledger.scanEntries()
-            if !scan.issues.isEmpty { model.notice = "有 \(scan.issues.count) 条操作记录损坏或版本不兼容，已保留现场；其他任务仍可核对。" }
+            if !scan.issues.isEmpty { model.notice = "有 \(scan.issues.count) 条操作记录损坏或版本不兼容，已保留现场；其他任务仍可核对。" + preserveEvidence(scan.issues.map(\.url), category: .commands) }
             let entries = scan.entries.sorted(by: { $0.request.createdAt > $1.request.createdAt })
             for (index, original) in entries.enumerated() {
                 var entry = original
@@ -521,14 +559,37 @@ import Darwin
                         }
                     } catch {
                         task.status = "需要核对"; task.detail = error.localizedDescription
+                        model.notice = preserveEvidence([followups.directory.appendingPathComponent(entry.request.requestID.uuidString + ".json")], category: .followups)
                     }
                     model.updateTask(task)
                 }
             }
         } catch { model.reportError("读取操作记录失败，已保留现场：\(error.localizedDescription)") }
     }
+    private func preserveEvidence(_ urls: [URL], category: RecoveryEvidenceCategory) -> String {
+        var saved = 0, failed = 0
+        for url in urls {
+            guard let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent) else { failed += 1; continue }
+            let result = recoveryEvidence.preserve(sourceURL: url, category: category, recordID: id)
+            if result.status == .failed { failed += 1 } else { saved += 1 }
+        }
+        return "已在宿主私有目录保全 \(saved) 份原始记录。" + (failed > 0 ? "另有 \(failed) 份无法安全备份，原件仍保留，请勿删除。" : "")
+    }
+    private func preserveInvalidFollowups() {
+        guard FileManager.default.fileExists(atPath: followups.directory.path) else { return }
+        do {
+            try PrivateFileIO.ensureDirectory(followups.directory)
+            let files = try FileManager.default.contentsOfDirectory(at: followups.directory, includingPropertiesForKeys: nil).filter { $0.pathExtension == "json" }
+            var invalid: [URL] = []
+            for file in files {
+                guard let id = UUID(uuidString: file.deletingPathExtension().lastPathComponent) else { invalid.append(file); continue }
+                do { _ = try followups.read(id) } catch { invalid.append(file) }
+            }
+            if !invalid.isEmpty { model.notice = "后续操作记录需要核对。" + preserveEvidence(invalid, category: .followups) }
+        } catch { model.notice = "后续操作记录无法安全扫描，原件已保留。" }
+    }
     private func presentation(_ result: TransferResult, title: String) -> TaskPresentation {
-        TaskPresentation(id: result.operationID, title: title, status: stateTitle(result.state), detail: "完成 \(result.completedCount) / \(result.items.count) 项", completed: result.completedCount, total: result.items.count, items: result.items.map { TaskItemPresentation(name: $0.source.lastPathComponent, status: stateTitle($0.status.rawValue), detail: $0.message, destination: $0.destination) }, canUndo: result.items.contains { $0.undoToken != nil }, canRetry: result.items.contains { $0.status == .failed && $0.failure?.retryable != false }, canReview: result.items.contains { $0.status == .needsReview || $0.status == .sourceRetained })
+        TaskPresentation(id: result.operationID, title: title, status: stateTitle(result.state), detail: "完成 \(result.completedCount) / \(result.items.count) 项", completed: result.completedCount, total: result.items.count, items: result.items.map { TaskItemPresentation(name: $0.source.lastPathComponent, status: stateTitle($0.status.rawValue), detail: $0.message, destination: $0.destination) }, canUndo: !model.isReadOnly && result.items.contains { $0.undoToken != nil }, canRetry: !model.isReadOnly && result.items.contains { $0.status == .failed && $0.failure?.retryable != false }, canReview: result.items.contains { $0.status == .needsReview || $0.status == .sourceRetained })
     }
     private func verifiedFollowup(_ id: UUID) throws -> TaskFollowupRecord? {
         guard let followup = try followups.read(id) else { return nil }
@@ -646,9 +707,11 @@ import Darwin
                 return TaskItemPresentation(id: item.itemID, name: item.source.lastPathComponent, status: undone ? "已撤销" : stateTitle(item.status.rawValue), detail: undone ? "已移回原位置" : item.message, destination: undone ? item.source : item.destination, source: item.source)
             }
         }
+        if model.isReadOnly { task.canUndo = false; task.canRetry = false; task.canCancel = false }
         return task
     }
     private func enqueueUndo(_ id: UUID) {
+        guard !model.isReadOnly else { model.reportError("只读诊断模式不能撤销文件操作。"); return }
         guard !queuedUndos.contains(id), let result = results[id] else { return }
         do {
             guard let followup = try verifiedFollowup(id), !followup.requiresReview,
@@ -663,6 +726,7 @@ import Darwin
     }
     private func undo(_ id: UUID) async {
         defer { queuedUndos.remove(id) }
+        guard !model.isReadOnly else { model.reportError("只读诊断模式不能撤销文件操作。"); return }
         guard let result = results[id] else { return }
         do {
             guard var followup = try verifiedFollowup(id), !followup.requiresReview else { throw CommandFailure(.recoveryRequired, "撤销状态不明确，请核对任务") }
@@ -696,6 +760,7 @@ import Darwin
         }
     }
     private func retry(_ id: UUID) {
+        guard !model.isReadOnly else { model.reportError("只读诊断模式不能重试文件操作。"); return }
         guard !queuedUndos.contains(id), let result = results[id], let old = requests[id] else { return }
         do {
             guard var followup = try verifiedFollowup(id), !followup.requiresReview, followup.retryRequestID == nil else { return }
@@ -723,17 +788,59 @@ import Darwin
             model.updateTask(decorate(presentation(result, title: title(old.action)), followup: followup))
         } catch { model.reportError(error) }
     }
+    private func enqueueStagingCleanup(_ token: StagingCleanupToken) {
+        guard !model.isReadOnly else { model.stagingCleanupFinished(error: "只读诊断模式不能清理暂存文件。"); return }
+        guard queuedStagingCleanups.insert(token.itemID).inserted else { return }
+        queue.append(.cleanupStaging(token)); startWorker()
+    }
+    private func cleanupStaging(_ token: StagingCleanupToken) async {
+        defer { queuedStagingCleanups.remove(token.itemID) }
+        do {
+            guard !model.isReadOnly else { throw CommandFailure(.accessDenied, "只读诊断模式不能清理暂存文件。") }
+            guard try ledger.entry(token.operationID) != nil else { throw CommandFailure(.recoveryRequired, "原任务记录缺失，暂存文件已保留。") }
+            let scan = try await engine.scanRecoveryRecords()
+            guard let record = scan.records.first(where: { $0.operationID == token.operationID && $0.itemID == token.itemID }) else {
+                throw CommandFailure(.recoveryRequired, "暂存归属记录无法验证，已保留现场。")
+            }
+            let followup = try followups.read(token.operationID) ?? TaskFollowupRecord(requestID: token.operationID)
+            let scopes = try acquireFollowupAccess(id: token.operationID, record: followup,
+                                                  urls: [record.source, token.stagingURL.deletingLastPathComponent()])
+            defer { scopes.forEach { $0.stopAccessingSecurityScopedResource() } }
+            _ = try await engine.cleanupStaging(token)
+            model.stagingCleanupFinished(error: nil)
+            review(token.operationID)
+        } catch { model.stagingCleanupFinished(error: error.localizedDescription) }
+    }
     private func review(_ id: UUID) {
         Task {
             do {
                 guard let entry = try ledger.entry(id) else { throw CommandFailure(.recoveryRequired, "操作记录缺失") }
                 let scan = try await engine.scanRecoveryRecords()
                 let records = scan.records.filter { $0.operationID == id }
-                if !scan.issues.isEmpty { model.notice = "有 \(scan.issues.count) 条文件记录损坏或不兼容，已保留；其余记录仍可核对。" }
+                let followup = try followups.read(id)
+                let stagingRecords = records.filter { $0.stagingURL != nil || $0.stagingCleanupState == .requested }
+                var scopes: [URL] = []
+                var stagingItems: [StagingRecoveryItem] = []
+                defer { scopes.forEach { $0.stopAccessingSecurityScopedResource() } }
+                if !stagingRecords.isEmpty {
+                    do {
+                        let urls = stagingRecords.flatMap { record in
+                            [record.source] + [record.stagingURL?.deletingLastPathComponent(), record.stagingCleanupURL?.deletingLastPathComponent()].compactMap { $0 }
+                        }
+                        scopes = try acquireFollowupAccess(id: id, record: followup ?? TaskFollowupRecord(requestID: id), urls: urls)
+                        stagingItems = await engine.inspectStagingRecovery(operationID: id).items
+                    } catch {
+                        stagingItems = stagingRecords.map { record in
+                            StagingRecoveryItem(operationID: id, itemID: record.itemID, stagingURL: record.stagingURL ?? record.stagingCleanupURL,
+                                                occupiedBytes: 0, disposition: .retainedForReview("无法取得有效目录授权，未扫描暂存占用；请重新授权来源和目标目录。"))
+                        }
+                    }
+                }
+                if !scan.issues.isEmpty { model.notice = "有 \(scan.issues.count) 条文件记录损坏或不兼容，已保留；其余记录仍可核对。" + preserveEvidence(scan.issues.map(\.url), category: .transfers) }
                 var items: [TaskReviewItemPresentation] = []
                 for record in records {
                     let assessment = await engine.recoveryAssessment(record)
-                    items.append(TaskReviewItemPresentation(id: record.itemID, name: record.source.lastPathComponent, status: stateTitle(record.phase), detail: assessment, source: record.source, destination: record.destination, sourceObservation: observation(record.source), destinationObservation: observation(record.destination)))
+                    items.append(TaskReviewItemPresentation(id: record.itemID, name: record.source.lastPathComponent, status: stateTitle(record.phase), detail: assessment, source: record.source, destination: record.destination, sourceObservation: observation(record.source), destinationObservation: observation(record.destination), staging: stagingItems.first { $0.itemID == record.itemID }))
                 }
                 if items.isEmpty {
                     items = entry.receipt.itemResults.map { item in
@@ -747,7 +854,6 @@ import Darwin
                 }
                 let confirmationURL = paths.operationsDirectory.appendingPathComponent("Reviews").appendingPathComponent(id.uuidString + ".json")
                 let confirmation = (try? PrivateFileIO.read(confirmationURL, maximumBytes: 4096)).flatMap { try? WireCodec.decoder().decode(ReviewConfirmation.self, from: $0) }
-                let followup = try followups.read(id)
                 let summary = followup?.requiresReview == true ? "撤销曾开始但没有完整结果。请检查原位置与移动目标；不会自动重做撤销。" : (entry.receipt.error?.message ?? "检查来源与目标。确认仅记录人工核对，不改变原始操作结果。")
                 model.showReview(TaskReviewPresentation(id: id, title: title(entry.request.action), status: followup?.requiresReview == true ? "需要核对" : stateTitle(entry.receipt.status.rawValue), summary: summary, items: items, canConfirm: !items.isEmpty, previouslyConfirmedAt: confirmation?.confirmedAt))
                 showTasks?()

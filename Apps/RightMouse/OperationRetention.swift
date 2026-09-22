@@ -28,7 +28,8 @@ struct OperationRetention {
         do {
             guard ledger.directory.standardizedFileURL == paths.operationsDirectory.appendingPathComponent("Commands").standardizedFileURL else { throw RetentionFailure.invalid }
             let root = try RetentionDirectory(absolute: paths.root)
-            let operations = try root.child("Operations")
+            let privateRoot = try RetentionDirectory(absolute: paths.privateRoot)
+            let operations = try privateRoot.child("Operations")
             let commands = try operations.child("Commands")
             let receipts = try root.child("Receipts")
             var directories: [String: RetentionDirectory] = ["Commands": commands, "Receipts": receipts]

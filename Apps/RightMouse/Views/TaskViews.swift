@@ -128,7 +128,7 @@ private struct TaskReviewView: View {
                 }
                 Spacer()
                 Button("重新检查") { model.refreshReview() }
-                    .disabled(model.isConfirmingReview || model.onReviewTask == nil)
+                    .disabled(model.isConfirmingReview || model.isCleaningStaging || model.onReviewTask == nil)
             }.padding(24)
             Divider()
             ScrollView {
@@ -153,10 +153,12 @@ private struct TaskReviewView: View {
                             if !item.detail.isEmpty { Text(item.detail).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) }
                             ReviewLocationRow(model: model, label: "来源", url: item.source, observation: item.sourceObservation)
                             ReviewLocationRow(model: model, label: "目标", url: item.destination, observation: item.destinationObservation)
+                            if let staging = item.staging { StagingReviewSection(model: model, staging: staging) }
                             if review.canConfirm {
                                 Toggle("我已核对这一项", isOn: Binding(get: { acknowledged.contains(item.id) }, set: { value in
                                     if value { acknowledged.insert(item.id) } else { acknowledged.remove(item.id) }
                                 })).toggleStyle(.checkbox).accessibilityLabel("已核对 \(item.name)")
+                                    .disabled(model.isCleaningStaging || model.isConfirmingReview)
                             }
                         }.padding(16).background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 10))
                             .accessibilityElement(children: .contain)
@@ -173,16 +175,59 @@ private struct TaskReviewView: View {
             }
             Divider()
             HStack {
-                if model.isConfirmingReview { ProgressView().controlSize(.small); Text("正在保存核对记录…").foregroundStyle(.secondary) }
+                if model.isCleaningStaging { ProgressView().controlSize(.small); Text("正在核验并清理暂存…").foregroundStyle(.secondary) }
+                else if model.isConfirmingReview { ProgressView().controlSize(.small); Text("正在保存核对记录…").foregroundStyle(.secondary) }
                 else { Text("已核对 \(acknowledged.count) / \(review.items.count) 项").font(.caption).foregroundStyle(.secondary) }
                 Spacer()
-                Button("稍后处理") { model.taskReview = nil }.keyboardShortcut(.cancelAction).disabled(model.isConfirmingReview)
+                Button("稍后处理") { model.taskReview = nil }.keyboardShortcut(.cancelAction).disabled(model.isConfirmingReview || model.isCleaningStaging)
                 Button("标记为已人工核对") { Task { await model.confirmReview() } }
                     .buttonStyle(.borderedProminent)
-                    .disabled(!ready || model.isConfirmingReview || model.onConfirmReviewTask == nil)
+                    .disabled(!ready || model.isConfirmingReview || model.isCleaningStaging || model.onConfirmReviewTask == nil)
             }.padding(20)
         }.frame(width: 680, height: 620)
-            .interactiveDismissDisabled(model.isConfirmingReview)
+            .interactiveDismissDisabled(model.isConfirmingReview || model.isCleaningStaging)
+    }
+}
+
+private struct StagingReviewSection: View {
+    @ObservedObject var model: AppModel
+    let staging: StagingRecoveryItem
+    @ViewState private var confirmsCleanup = false
+    private var cleanupToken: StagingCleanupToken? {
+        if case .cleanupAllowed(let token) = staging.disposition { return token }
+        return nil
+    }
+    private var explanation: String {
+        switch staging.disposition {
+        case .cleanupAllowed: return "此暂存的归属证据可核验。确认后，服务会再次检查身份与权限，再清理该任务的暂存副本。"
+        case .legacyEvidenceOnly(let reason), .retainedForReview(let reason): return reason
+        }
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Divider()
+            ReviewLocationRow(model: model, label: "暂存", url: staging.stagingURL, observation: explanation)
+            Text("空间占用估算：\(ByteCountFormatter.string(fromByteCount: max(0, staging.occupiedBytes), countStyle: .file))")
+                .font(.caption.weight(.semibold))
+            Text("按文件系统已分配块统计；无法访问的位置可能无法完整统计，实际释放量由文件系统决定。")
+                .font(.caption).foregroundStyle(.secondary)
+            if cleanupToken != nil {
+                Button("清理此任务暂存…", role: .destructive) { confirmsCleanup = true }
+                    .disabled(model.isReadOnly || model.isCleaningStaging || model.isConfirmingReview || model.onCleanupStaging == nil)
+                    .accessibilityLabel("清理当前项目的已验证暂存副本")
+            } else {
+                Label("当前证据不足以允许清理，暂存将保留。", systemImage: "lock.shield")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .confirmationDialog("确认清理此任务的暂存副本？", isPresented: $confirmsCleanup, titleVisibility: .visible) {
+            Button("只清理此任务暂存", role: .destructive) {
+                if let token = cleanupToken { model.beginStagingCleanup(token) }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("将清理下面这个项目的暂存目录及其中副本，不删除来源文件或已提交目标。此清理无法撤销。\n\n\(staging.stagingURL?.path ?? "暂存位置未记录")")
+        }
     }
 }
 

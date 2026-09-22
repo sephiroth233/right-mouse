@@ -119,7 +119,8 @@ private struct GeneralSettingsView: View {
             Section("开始使用") {
                 SetupStep(number: 1, title: "启用 Finder 扩展", subtitle: model.isDevelopmentStorage ? (model.extensionEnabled ? "扩展已登记，但共享通信不可用。" : "开发模式下共享通信不可用，Finder 菜单暂不可用。") : (model.extensionEnabled ? "扩展已启用，可继续选择覆盖目录。" : "在系统设置中启用 RightMouse Finder 扩展。"), complete: !model.isDevelopmentStorage && model.extensionEnabled) { model.showExtensionSettings() }
                 SetupStep(number: 2, title: "选择使用目录", subtitle: "已配置 \(model.configuration.watchedLocations.count) 个目录；子文件夹一并覆盖。", complete: !model.configuration.watchedLocations.isEmpty) { navigate(.diagnostics) }
-                SetupStep(number: 3, title: "定制右键菜单", subtitle: "新建文件、复制路径、剪切移动与打开方式。", complete: false) { navigate(.menus) }
+                SetupExerciseView(model: model, showTasks: { navigate(.tasks) })
+                SetupStep(number: 4, title: "定制右键菜单", subtitle: "新建文件、复制路径、剪切移动与打开方式。", complete: false) { navigate(.menus) }
             }
             Section("偏好设置") {
                 Toggle("登录时启动 RightMouse", isOn: Binding(get: { model.configuration.launchAtLogin }, set: model.setLaunchAtLogin))

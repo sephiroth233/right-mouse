@@ -15,7 +15,7 @@ final class FinderSync: FIFinderSync {
     private let producerID = UUID()
     private let ioQueue = DispatchQueue(label: "cn.rightmouse.finder.configuration", qos: .utility)
     private let logger = Logger(subsystem: "cn.rightmouse.RightMouse.FinderExtension", category: "Finder")
-    private var configuration = AppConfiguration()
+    private var configuration = MenuConfigurationSnapshot(configuration: AppConfiguration(), available: false)
     private var pendingMove: PendingMoveSnapshot?
     private var paths: SharedPaths?
     private var sources: [DispatchSourceFileSystemObject] = []
@@ -36,7 +36,7 @@ final class FinderSync: FIFinderSync {
             let resolved = try SharedPaths.resolve()
             DispatchQueue.main.async { [weak self] in self?.paths = resolved }
             refresh(paths: resolved)
-            watch(resolved.configurationDirectory, paths: resolved)
+            watch(resolved.menuDirectory, paths: resolved)
             watch(resolved.root, paths: resolved)
             // Notifications can be lost when directories are atomically replaced. A small
             // bounded read also refreshes the clipboard snapshot after host cold starts.
@@ -61,14 +61,9 @@ final class FinderSync: FIFinderSync {
 
     private func refresh(paths: SharedPaths) {
         do {
-            // The extension is read-only: do not call the host store's corruption backup path.
-            let file = paths.configurationDirectory.appendingPathComponent("configuration.json")
-            let config: AppConfiguration
-            if FileManager.default.fileExists(atPath: file.path) {
-                let data = try PrivateFileIO.read(file, maximumBytes: ConfigurationStore.maximumBytes)
-                config = try JSONDecoder().decode(AppConfiguration.self, from: data)
-                try config.validate()
-            } else { config = AppConfiguration() }
+            // Only the host publishes this authority-free menu projection. Never
+            // read a legacy full configuration or a host-private storage location.
+            let config = try MenuSnapshotStore(directory: paths.menuDirectory).load()
             let pending: PendingMoveSnapshot?
             if let data = try? PrivateFileIO.read(paths.pendingMoveURL, maximumBytes: 4096) {
                 pending = try? WireCodec.decoder().decode(PendingMoveSnapshot.self, from: data)
@@ -77,7 +72,7 @@ final class FinderSync: FIFinderSync {
             let watched = Set(config.watchedLocations.map { URL(fileURLWithPath: $0.path, isDirectory: true) })
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                self.configuration = config; self.pendingMove = pending; self.configurationError = false
+                self.configuration = config; self.pendingMove = pending; self.configurationError = !config.available
                 FIFinderSyncController.default().directoryURLs = watched
             }
         } catch {
@@ -116,7 +111,7 @@ final class FinderSync: FIFinderSync {
             message.isEnabled = false; menu.addItem(message)
         }
         if paths != nil, !configurationError {
-            for entry in MenuPolicy.entries(configuration: configuration, context: context, pendingMove: pendingMove) { menu.addItem(makeItem(entry, context: context)) }
+            for entry in MenuPolicy.entries(snapshot: configuration, context: context, pendingMove: pendingMove) { menu.addItem(makeItem(entry, context: context)) }
         }
         if !menu.items.isEmpty { menu.addItem(.separator()) }
         let settings = NSMenuItem(title: "RightMouse 设置…", action: #selector(openSettings(_:)), keyEquivalent: "")
