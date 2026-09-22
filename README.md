@@ -16,7 +16,7 @@ open .build/native/RightMouse.app
 
 脚本生成的 ad-hoc 开发版会实际检查共享容器的读写能力。共享容器不可用时，宿主使用 Application Support 下独立的 `RightMouse-Development` 目录，并常驻提示 Finder 菜单暂不可用；可以继续在应用内的文件操作台使用本地功能。正式签名构建与 Finder 扩展不允许此降级。`RIGHTMOUSE_DATA_DIR` 仅供带开发标志的宿主使用，测试工具通过显式临时目录注入存储。
 
-启动存储修复的历史验证见 [启动存储记录](Config/validation/development-storage-fallback-2026-09-23.md)；最新构建的检查结果与校验值见下文的工作流集成证据。
+启动存储修复的历史验证见 [启动存储记录](Config/validation/development-storage-fallback-2026-09-23.md)；最新构建的检查结果与校验值见[诊断与保留集成证据](specs/001-finder-core/evidence/EV-diagnostics-retention-001.md)。
 
 `scripts/package-app.sh --development` 生成开发 ZIP。完整 Xcode 工程为 `RightMouse.xcodeproj`；新增 Swift 文件后运行 `python3 Config/generate-project.py`。标准 XCTest 和正式签名步骤见 [构建说明](Config/README.md)。
 
@@ -29,6 +29,8 @@ open .build/native/RightMouse.app
 - 最近目标保留 10 项，使用安全书签及目录身份核对；支持修复、移除与清空记录。
 - 收藏目录、Terminal、VS Code 与自定义应用入口；VS Code 跨目录选择先指定一个项目目录。
 - 菜单开关、排序、分组、预览、任务进度与恢复核对界面。
+- 脱敏诊断事件保留 7 天或 10 MiB，支持主动导出；证据完整的过期终态记录按 30 天策略清理，恢复证据继续保留。
+- 权限、空间、卷状态与来源变化使用独立错误码；不可重试项禁止直接重试。
 - 液态玻璃导航与预览，主窗口默认 960×680 pt，在当前屏幕居中；旧系统与减少透明度模式提供材质降级。
 
 首次使用需在应用中选择使用目录，并在系统扩展设置中确认 Finder 扩展状态。扩展仅对配置目录提供菜单。目录授权来自系统选择器；配置中的路径文字本身不代表授权。
@@ -50,9 +52,11 @@ flowchart LR
 
 ## 当前验证边界
 
-150 项核心夹具检查、168 项宿主侧检查通过（153 项真实宿主断言及 15 项打开方式规划断言），详情及最新开发包校验值见 [工作流集成证据](specs/001-finder-core/evidence/EV-workflows-001.md)。撤销与重试的早期验证见 [恢复证据](specs/001-finder-core/evidence/EV-followup-hardening-001.md)。宿主与嵌入扩展已实际编译，开发签名结构验证通过；Finder 登记和进程加载证据见 [接入记录](Config/validation/finder-load-2026-09-22.md)。后续系统日志已确认当前 ad-hoc 构建的 App Group 访问被拒绝，路径查找成功不代表共享通信可用。
+226 项核心夹具检查、244 项宿主侧检查通过（173 项宿主集成、15 项打开规划及 56 项保留策略断言），详情及开发包校验值见[诊断与保留集成证据](specs/001-finder-core/evidence/EV-diagnostics-retention-001.md)。批量冲突与最近目标的上一轮证据见[工作流集成记录](specs/001-finder-core/evidence/EV-workflows-001.md)。宿主与嵌入扩展已实际编译，开发签名结构验证通过；Finder 登记和进程加载证据见[接入记录](Config/validation/finder-load-2026-09-22.md)。后续系统日志已确认当前 ad-hoc 构建的 App Group 访问被拒绝，路径查找成功不代表共享通信可用。
 
 尚未完整通过：真实 Finder 菜单到宿主的端到端操作、所有权限撤回场景、真实双卷/外置卷故障、最低 macOS 版本、完整键盘与 VoiceOver 验收、Developer ID 签名及公证。当前机器没有有效分发证书，也未安装完整 Xcode。开发包不等于已公证发行版。
+
+仍需编码的需求见[V1 实现差距](specs/001-finder-core/evidence/EV-implementation-gaps-001.md)：孤立暂存显式清理、首次创建演练、宿主私有存储分层及损坏日志保全副本。保留策略对撤销、旧暂存及不完整证据采取继续保留的策略；本阶段没有把这些工作标为完成。
 
 [优化菜单规则历史基准](docs/sdd/evidence/menu-policy-benchmark/README.md) 保留三种场景各 100 次的原始样本和对应源码摘要；该轮纯规则 P95 为 1.955 / 4.104 / 0.169 ms，不包含真实 Finder 与 NSMenu 构造，也不作为新增最近目标菜单的性能结果。
 
