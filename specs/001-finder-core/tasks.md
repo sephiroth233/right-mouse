@@ -18,7 +18,11 @@
 
 每项任务交付代码/配置或实验记录，运行其关联用例，保存 `EV-Txxx-*` 证据，再将 `- [ ]` 改成 `- [x]`。依赖只是开始条件，不是通过证明；后续修改使证据失效时重开对应任务。任务实际负责人、开始/结束日期和 PR/提交引用在施工时填写。
 
-当前证据：[环境基线](evidence/EV-T001-environment.md)、[105 项核心检查](evidence/EV-core-checks-001.md)。负责人：主代理及各模块子代理；开始日期：2026-09-22；实现版本以对应 Git 提交为准。
+当前证据：[环境基线](evidence/EV-T001-environment.md)、[首轮 105 项核心检查](evidence/EV-core-checks-001.md)、[119 项核心与 59 项宿主检查](evidence/EV-followup-hardening-001.md)、[液态玻璃与窗口布局](evidence/EV-liquid-glass-001.md)、[Finder 接入与共享容器拒绝记录](../../Config/validation/finder-load-2026-09-22.md)。负责人：主代理及各模块子代理；开始日期：2026-09-22。
+
+已提交里程碑：`8df543f` 规格基线、`8428ae9` 核心引擎、`da90eec` 原生宿主与扩展、`2de91f6` 液态玻璃与居中窗口、`9dacf97` 签名及 profiles 校验、`2c0609e` 持久撤销、失败重试及恢复隔离。119/59 是夹具检查数，不代表已通过相同数量的验收用例。完整任务继续按以下门禁勾选。
+
+下一批可编码工作见 [V1 实现差距记录](evidence/EV-implementation-gaps-001.md)，包括批量冲突选择、最近目标、记录保留与诊断导出、VS Code 多目录语义。
 
 计划中的源码位置见 [工程结构](plan.md)。纯逻辑可使用临时夹具自动验证；系统接入必须是真实 Finder 和目标签名环境。涉及删除、磁盘满或中断的试验只能在测试夹具中执行。所有关联映射见 [traceability.json](traceability.json)，不允许出现“功能已经实现但没有需求号”的交付。
 
