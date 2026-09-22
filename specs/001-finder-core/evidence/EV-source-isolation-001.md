@@ -47,7 +47,7 @@ journal 新增可选的 sourceCleanupURL、sourceCleanupIdentity、sourceCleanup
 
 原生验证工具重置后仍报告 cgWindowNotFound。进程和初始化日志只能证明启动代码执行，不证明窗口可见、液态玻璃效果、居中几何或 VoiceOver 可用。本轮不将这些 UI 验收标为通过。临时副本没有注册业务 URL scheme，也没有包含 Finder 扩展，不作为 Finder 共享通信证据。
 
-隔离副本的空数据启动还记录过一条 recoveryDetected。将其完全测试数据复制并保留权限后，当前保留器返回 scanned/pruned/removed/retained/issues 全部为 0；单根、双根空布局回归也未复现。此启动诊断差异尚未解释，未为消除提示而放宽安全检查。临时副本进程已结束，原 RightMouse 进程未被终止。
+隔离副本的空数据启动还记录过一条 recoveryDetected。将其完全测试数据复制并保留权限后，当前保留器返回 scanned/pruned/removed/retained/issues 全部为 0；单根、双根空布局回归也未复现。当时未解释的诊断差异已在后续定位为目录 URL 标记比较误报，见[首次启动修复](EV-startup-retention-001.md)；未为消除提示而放宽安全检查。临时副本进程已结束，原 RightMouse 进程未被终止。
 
 ## 参考
 

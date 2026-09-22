@@ -14,7 +14,7 @@
 
 ## 1. 当前基线
 
-当前已有原生宿主、FinderSync 扩展、共享核心、Xcode 工程和开发构建脚本。304 项核心、351 项宿主侧检查及 15 项隔离 APFS 双卷检查通过，最新证据见[来源隔离与竞争修复](../../specs/001-finder-core/evidence/EV-source-isolation-001.md)和[双卷验证](../../specs/001-finder-core/evidence/EV-real-volume-001.md)。真实 Finder 共享通信仍受签名授权限制，G0 与正式发布门禁未闭合；文档结构或夹具通过不代表完整应用验收。
+当前已有原生宿主、FinderSync 扩展、共享核心、Xcode 工程和开发构建脚本。304 项核心、356 项宿主侧检查及 15 项隔离 APFS 双卷检查通过，最新宿主回归见[首次启动修复](../../specs/001-finder-core/evidence/EV-startup-retention-001.md)，其他证据见[来源隔离与竞争修复](../../specs/001-finder-core/evidence/EV-source-isolation-001.md)和[双卷验证](../../specs/001-finder-core/evidence/EV-real-volume-001.md)。真实 Finder 共享通信仍受签名授权限制，G0 与正式发布门禁未闭合；文档结构或夹具通过不代表完整应用验收。
 
 范围承接 [原始设计方案](../design-plan.md)：新建文件、模板、复制路径/名称、剪切粘贴、复制/移动到、常用目录、Terminal/VS Code 打开、菜单配置、权限与诊断。图片工具、翻译、ZIP、云盘备用入口完整产品化列入后续版本。
 

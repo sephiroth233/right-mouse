@@ -394,7 +394,8 @@
         "evidence/EV-followup-hardening-001.md",
         "evidence/EV-transfer-failure-codes-001.md",
         "evidence/EV-private-storage-recovery-001.md",
-        "evidence/EV-native-build-001.md"
+        "evidence/EV-native-build-001.md",
+        "evidence/EV-startup-retention-001.md"
       ]
     },
     {
@@ -502,7 +503,8 @@
         "evidence/EV-workflows-001.md",
         "evidence/EV-diagnostics-retention-001.md",
         "evidence/EV-source-isolation-001.md",
-        "evidence/EV-liquid-glass-001.md"
+        "evidence/EV-liquid-glass-001.md",
+        "evidence/EV-startup-retention-001.md"
       ]
     },
     {
@@ -548,7 +550,8 @@
         "evidence/EV-open-with-host-checks-001.md",
         "../../docs/sdd/evidence/menu-policy-benchmark/2026-09-23-menu-snapshot-recent/README.md",
         "evidence/EV-transfer-failure-codes-001.md",
-        "evidence/EV-native-build-001.md"
+        "evidence/EV-native-build-001.md",
+        "evidence/EV-startup-retention-001.md"
       ]
     },
     {
@@ -590,7 +593,8 @@
       "evidence": [
         "evidence/EV-native-build-001.md",
         "../../Config/validation/finder-load-2026-09-22.md",
-        "evidence/EV-source-isolation-001.md"
+        "evidence/EV-source-isolation-001.md",
+        "evidence/EV-startup-retention-001.md"
       ]
     }
   ],
@@ -733,7 +737,8 @@
       "status": "NOT_RUN",
       "evidence": [
         "evidence/EV-private-storage-recovery-001.md",
-        "../../Config/validation/finder-load-2026-09-22.md"
+        "../../Config/validation/finder-load-2026-09-22.md",
+        "evidence/EV-startup-retention-001.md"
       ],
       "remaining": "演练通过真实宿主创建与匹配回执；扩展启用和目录授权拒绝/修复的系统 UI 未验收。"
     },
@@ -792,7 +797,8 @@
         "evidence/EV-core-checks-001.md",
         "evidence/EV-followup-hardening-001.md",
         "evidence/EV-private-storage-recovery-001.md",
-        "evidence/EV-source-isolation-001.md"
+        "evidence/EV-source-isolation-001.md",
+        "evidence/EV-startup-retention-001.md"
       ],
       "remaining": "持久状态恢复、坏日志保全和不重放已有夹具；各持久化边界强杀实际宿主再启动尚未执行。"
     },
@@ -847,7 +853,8 @@
       "evidence": [
         "evidence/EV-diagnostics-retention-001.md",
         "evidence/EV-private-storage-recovery-001.md",
-        "evidence/EV-source-isolation-001.md"
+        "evidence/EV-source-isolation-001.md",
+        "evidence/EV-startup-retention-001.md"
       ],
       "remaining": "脱敏字段、容量/时间保留和导出数据已有检查；断网下全部核心功能及实际导出选择器未人工验收。"
     },
