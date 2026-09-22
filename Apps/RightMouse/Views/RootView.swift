@@ -188,7 +188,12 @@ private struct DiagnosticsSettingsView: View {
                         Text("选择目录后保存安全书签；访问失败时，请使用“重新选择”修复。启用扩展不会自动授予所有文件的读写权限。")
                         Text("终端联动可能在首次使用时请求自动化权限。基础文件操作不要求辅助功能或完全磁盘访问权限。")
                         Text("诊断摘要仅含系统版本、组件状态和数量，不包含文件内容、路径或书签。").font(.caption).foregroundStyle(.secondary)
-                        Button("复制诊断摘要") { model.copyDiagnostics() }
+                        HStack {
+                            Button("复制诊断摘要") { model.copyDiagnostics() }
+                            Button("导出脱敏诊断") { model.exportDiagnostics() }
+                        }
+                        Text("诊断事件最多保留 7 天或 10 MiB，先达到的限制生效。导出文件仅含事件时间、组件、随机任务标识、操作类型、状态和错误码，不含文件名、路径、内容或安全书签。证据完整的终态任务在超过 30 天后清理；未完成、撤销、暂存或需要核对的记录继续保留。").font(.caption).foregroundStyle(.secondary)
+                        if let summary = model.retentionSummary { Text(summary).font(.caption).foregroundStyle(.secondary) }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
                 }
             }.padding(.horizontal, 28).padding(.bottom, 24)

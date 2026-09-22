@@ -22,6 +22,7 @@ xcrun swiftc "${common[@]}" \
   Apps/RightMouse/ConflictDialog.swift \
   Apps/RightMouse/HostController.swift \
   Apps/RightMouse/TaskFollowupStore.swift \
+  Apps/RightMouse/OperationRetention.swift \
   "${check_sources[@]}" \
   -framework AppKit \
   -framework SwiftUI \

@@ -10,6 +10,7 @@ import Darwin
     private let inbox: InboxStore
     private let engine: FileTransferEngine
     private let followups: TaskFollowupStore
+    private let diagnostics: DiagnosticLogStore
     private enum Work { case command(CommandRequest), undo(UUID) }
     private var queue: [Work] = []
     private var queuedUndos: Set<UUID> = []
@@ -44,10 +45,26 @@ import Darwin
         inbox = InboxStore(directory: paths.inboxDirectory)
         engine = FileTransferEngine(journalDirectory: paths.operationsDirectory.appendingPathComponent("Transfers"))
         followups = TaskFollowupStore(directory: paths.operationsDirectory.appendingPathComponent("Followups"))
+        // Foundation contracts /private/tmp back to the /tmp symlink on macOS.
+        // Use the OS physical path for this already prepared application root;
+        // the diagnostic store then opens every descendant without following links.
+        let diagnosticRoot: URL
+        if let physicalPath = realpath(paths.root.path, nil) {
+            diagnosticRoot = URL(fileURLWithPath: String(cString: physicalPath), isDirectory: true)
+            free(physicalPath)
+        } else { diagnosticRoot = paths.root }
+        diagnostics = DiagnosticLogStore(directory: diagnosticRoot.appendingPathComponent("Diagnostics"))
         model.isDevelopmentStorage = paths.isDevelopmentFallback
         model.storageDiagnostic = paths.developmentDiagnostic
         model.onPerformAction = { [weak self] action, files, target in self?.perform(action, files: files, destination: target) }
-        model.onConfigurationChanged = { _ in DistributedNotificationCenter.default().postNotificationName(Notification.Name("cn.rightmouse.configurationChanged"), object: nil, deliverImmediately: true) }
+        model.onConfigurationChanged = { [weak self] _ in
+            self?.diagnostics.append(component: .configuration, event: .configurationSaved)
+            DistributedNotificationCenter.default().postNotificationName(Notification.Name("cn.rightmouse.configurationChanged"), object: nil, deliverImmediately: true)
+        }
+        model.onExportDiagnostics = { [weak self] in
+            guard let self else { throw CommandFailure(.ioFailed, "诊断服务已退出，请重新打开应用。") }
+            return self.diagnostics.export()
+        }
         model.onCancelTask = { [weak self] id in self?.cancellations[id]?.cancel() }
         model.onUndoTask = { [weak self] id in self?.enqueueUndo(id) }
         model.onRetryTask = { [weak self] id in self?.retry(id) }
@@ -57,8 +74,14 @@ import Darwin
             let directory = self.paths.operationsDirectory.appendingPathComponent("Reviews")
             try PrivateFileIO.ensureDirectory(directory)
             try PrivateFileIO.write(WireCodec.encoder().encode(ReviewConfirmation(requestID: id, confirmedAt: Date())), to: directory.appendingPathComponent(id.uuidString + ".json"))
+            self.diagnostics.append(component: .host, event: .reviewConfirmed, requestID: id)
         }
         try? FileManager.default.removeItem(at: paths.pendingMoveURL)
+        diagnostics.append(component: .host, event: .hostStarted)
+        diagnostics.append(component: .configuration, event: .configurationLoaded, errorCode: model.isReadOnly ? .recoveryRequired : nil)
+        let retention = OperationRetention(paths: paths, ledger: ledger).prune()
+        model.retentionSummary = "本次启动已清理 \(retention.prunedRequests) 个过期任务，保留 \(retention.retainedRequests) 个任务。" + (retention.issues > 0 ? "有 \(retention.issues) 处记录无法确认安全清理，已保留现场。" : "")
+        if retention.issues > 0 { diagnostics.append(component: .host, event: .recoveryDetected, errorCode: .recoveryRequired) }
         restoreHistory()
     }
 
@@ -87,6 +110,7 @@ import Darwin
                 return true
             }
             activeIDs.insert(request.requestID)
+            diagnostics.append(component: .host, event: .requestAccepted, requestID: request.requestID, action: diagnosticAction(request.action), status: .accepted)
             if interactive { interactiveIDs.insert(request.requestID); sessionAuthorizedIDs.insert(request.requestID) }
             publishBestEffort(accepted.entry.receipt)
             if request.action.changesFiles {
@@ -96,7 +120,10 @@ import Darwin
                 startWorker()
             } else { Task { await self.execute(request) } }
             return true
-        } catch { model.reportError(error); return false }
+        } catch {
+            diagnostics.append(component: .host, event: .requestRejected, requestID: request.requestID, action: diagnosticAction(request.action), status: .rejected, errorCode: (error as? CommandFailure)?.code ?? .ioFailed)
+            model.reportError(error); return false
+        }
     }
     private func startWorker() {
         guard worker == nil else { return }
@@ -283,7 +310,7 @@ import Darwin
         }
         let itemReceipts = result.items.map { item in
             ItemReceipt(itemID: item.itemID, status: item.status == .completed ? "success" : item.status.rawValue, destinationURL: item.destination,
-                        error: item.status == .failed ? CommandFailure(.ioFailed, item.message) : (item.status == .sourceRetained ? CommandFailure(.sourceRetained, item.message) : nil))
+                        error: item.failure ?? (item.status == .failed ? CommandFailure(.ioFailed, item.message) : (item.status == .sourceRetained ? CommandFailure(.sourceRetained, item.message) : (item.status == .needsReview ? CommandFailure(.recoveryRequired, item.message) : nil))))
         }
         do {
             var followup = try followups.read(id) ?? TaskFollowupRecord(requestID: id, destination: destination)
@@ -451,7 +478,23 @@ import Darwin
         guard var entry = try ledger.entry(id) else { throw CommandFailure(.recoveryRequired, "操作日志缺失") }
         entry.receipt = CommandReceipt(requestID: id, revision: entry.receipt.revision + 1, status: status, itemResults: items, error: error)
         try ledger.save(entry); publishBestEffort(entry.receipt)
-        if [.completed,.partial,.failed,.cancelled,.rejected].contains(status) { try? inbox.remove(id) }
+        if [.completed,.partial,.failed,.cancelled,.rejected].contains(status) {
+            try? inbox.remove(id)
+            diagnostics.append(component: .host, event: .requestFinished, requestID: id, action: diagnosticAction(entry.request.action), status: status, errorCode: error?.code ?? items.compactMap { $0.error?.code }.first)
+        } else if status == .needsReview {
+            diagnostics.append(component: .host, event: .recoveryDetected, requestID: id, action: diagnosticAction(entry.request.action), status: status, errorCode: .recoveryRequired)
+        }
+    }
+    private func diagnosticAction(_ action: CommandAction) -> DiagnosticAction {
+        switch action {
+        case .createFile: return .createFile
+        case .copyText: return .copyText
+        case .stageMove: return .stageMove
+        case .pasteMove: return .pasteMove
+        case .transfer(let mode, _, _): return mode == .copy ? .copyTo : .moveTo
+        case .openWith: return .openWith
+        case .openFavorite: return .openFavorite
+        }
     }
     private func restoreHistory() {
         do {
@@ -466,6 +509,7 @@ import Darwin
                     entry.receipt.status = .needsReview; entry.receipt.revision += 1
                     entry.receipt.error = CommandFailure(.recoveryRequired, "上次操作未留下完整结果，请核对文件和任务记录。")
                     try ledger.save(entry); publishBestEffort(entry.receipt)
+                    diagnostics.append(component: .host, event: .recoveryDetected, requestID: entry.request.requestID, action: diagnosticAction(entry.request.action), status: .needsReview, errorCode: .recoveryRequired)
                 }
                 if entry.request.action.changesFiles && (index < 100 || entry.receipt.status == .needsReview) {
                     var task = TaskPresentation(id: entry.request.requestID, title: title(entry.request.action), status: entry.receipt.status == .needsReview ? "需要核对" : stateTitle(entry.receipt.status.rawValue), detail: entry.receipt.error?.message ?? "历史任务", total: entry.receipt.itemResults.count, items: entry.receipt.itemResults.map { TaskItemPresentation(name: $0.destinationURL?.lastPathComponent ?? "项目", status: stateTitle($0.status), detail: $0.error?.message ?? "", destination: $0.destinationURL) }, canReview: true)
@@ -484,7 +528,7 @@ import Darwin
         } catch { model.reportError("读取操作记录失败，已保留现场：\(error.localizedDescription)") }
     }
     private func presentation(_ result: TransferResult, title: String) -> TaskPresentation {
-        TaskPresentation(id: result.operationID, title: title, status: stateTitle(result.state), detail: "完成 \(result.completedCount) / \(result.items.count) 项", completed: result.completedCount, total: result.items.count, items: result.items.map { TaskItemPresentation(name: $0.source.lastPathComponent, status: stateTitle($0.status.rawValue), detail: $0.message, destination: $0.destination) }, canUndo: result.items.contains { $0.undoToken != nil }, canRetry: result.items.contains { $0.status == .failed }, canReview: result.items.contains { $0.status == .needsReview || $0.status == .sourceRetained })
+        TaskPresentation(id: result.operationID, title: title, status: stateTitle(result.state), detail: "完成 \(result.completedCount) / \(result.items.count) 项", completed: result.completedCount, total: result.items.count, items: result.items.map { TaskItemPresentation(name: $0.source.lastPathComponent, status: stateTitle($0.status.rawValue), detail: $0.message, destination: $0.destination) }, canUndo: result.items.contains { $0.undoToken != nil }, canRetry: result.items.contains { $0.status == .failed && $0.failure?.retryable != false }, canReview: result.items.contains { $0.status == .needsReview || $0.status == .sourceRetained })
     }
     private func verifiedFollowup(_ id: UUID) throws -> TaskFollowupRecord? {
         guard let followup = try followups.read(id) else { return nil }
@@ -528,7 +572,7 @@ import Darwin
               try identity(destination.resolvingSymlinksInPath()) == expectedTarget else {
             throw CommandFailure(.sourceChanged, "原目标目录已变化或缺少身份记录，请重新选择目标后发起操作。")
         }
-        for item in record.result?.items.filter({ $0.status == .failed }) ?? [] {
+        for item in record.result?.items.filter({ $0.status == .failed && $0.failure?.retryable != false }) ?? [] {
             let path = paths.operationsDirectory.appendingPathComponent("Transfers").appendingPathComponent(item.itemID.uuidString + ".json")
             guard let data = try? PrivateFileIO.read(path), let journal = try? JSONDecoder().decode(TransferJournalRecord.self, from: data),
                   journal.schemaVersion == 1, journal.operationID == parent, journal.itemID == item.itemID,
@@ -610,6 +654,7 @@ import Darwin
             guard let followup = try verifiedFollowup(id), !followup.requiresReview,
                   result.items.contains(where: { $0.undoToken != nil && !followup.undoStarted.contains($0.itemID) }) else { return }
             queuedUndos.insert(id)
+            diagnostics.append(component: .fileOperations, event: .undoRequested, requestID: id, action: .undo)
             var task = decorate(presentation(result, title: "等待撤销移动"), followup: followup)
             task.status = "等待撤销"; task.canUndo = false; task.canRetry = false
             model.updateTask(task)
@@ -660,7 +705,7 @@ import Darwin
             case .pasteMove(_, _, let conflict): mode = .move; policy = conflict
             default: return
             }
-            let failed = result.items.filter { $0.status == .failed }.map { reference($0.source) }
+            let failed = result.items.filter { $0.status == .failed && $0.failure?.retryable != false }.map { reference($0.source) }
             guard !failed.isEmpty, let destination = followup.destination else { return }
             let context = ActionContext(entryPoint: .items, container: nil, selection: failed)
             let request = CommandRequest(context: context, action: .transfer(mode: mode, destination: reference(destination), conflictPolicy: policy))
@@ -669,6 +714,7 @@ import Darwin
             try validateRetryIdentities(parent: id, record: followup)
             followupParents[request.requestID] = id
             guard submit(request) else { followupParents[request.requestID] = nil; return }
+            diagnostics.append(component: .fileOperations, event: .retryRequested, requestID: id, action: .retry)
             // submit and this write run without suspension on MainActor. On write
             // failure, cancel the queued child before its first file side effect.
             followup.retryRequestID = request.requestID
