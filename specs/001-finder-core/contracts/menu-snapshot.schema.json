@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rightmouse.local/contracts/menu-snapshot.schema.json",
+  "title": "Finder display-only menu snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "revision", "available", "compactMenu", "conflictPolicy", "actions", "favorites", "watchedLocations", "recentDestinations", "integrations", "templates"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "revision": {"type": "integer", "minimum": 0},
+    "available": {"type": "boolean"},
+    "compactMenu": {"type": "boolean"},
+    "conflictPolicy": {"enum": ["ask", "skip", "keepBoth"]},
+    "actions": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/action"}},
+    "favorites": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/location"}},
+    "watchedLocations": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/location"}},
+    "recentDestinations": {"type": "array", "maxItems": 10, "items": {"$ref": "#/$defs/location"}},
+    "integrations": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/integration"}},
+    "templates": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/template"}}
+  },
+  "$defs": {
+    "action": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "commandType", "title", "enabled", "order"],
+      "properties": {
+        "id": {"type": "string"}, "title": {"type": "string"},
+        "commandType": {"enum": ["createFile", "copyText", "stageMove", "pasteMove", "copyTo", "moveTo", "openFavorite", "openWith"]},
+        "enabled": {"type": "boolean"}, "order": {"type": "integer"}, "groupID": {"type": ["string", "null"]}
+      }
+    },
+    "location": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name", "path", "order"],
+      "properties": {
+        "id": {"type": "string", "format": "uuid"}, "name": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "pattern": "^/[^\u0000]*$"}, "order": {"type": "integer"}
+      }
+    },
+    "template": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {"id": {"type": "string"}, "name": {"type": "string"}}
+    },
+    "integration": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name", "adapterType", "enabled"],
+      "properties": {
+        "id": {"type": "string"}, "name": {"type": "string"},
+        "adapterType": {"enum": ["urls", "terminal", "vscode"]}, "enabled": {"type": "boolean"}
+      }
+    }
+  }
+}

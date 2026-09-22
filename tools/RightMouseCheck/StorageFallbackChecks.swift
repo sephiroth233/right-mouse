@@ -19,7 +19,7 @@ func runStorageFallbackChecks() throws -> Int {
     var prepared: [URL] = []; var localLookups = 0
     let shared = try SharedPaths.resolveAndPrepare(environment: development, groupContainer: { _ in group }, applicationSupport: { localLookups += 1; return support }, prepare: { prepared.append($0.root) })
     try check(!shared.isDevelopmentFallback && shared.root == group.appendingPathComponent("RightMouse", isDirectory: true), "Working group must be preferred even in a development build")
-    try check(localLookups == 0 && prepared.count == 1, "Working group must not touch local development storage")
+    try check(localLookups == 1 && prepared.count == 1 && shared.privateRoot == support.appendingPathComponent("RightMouse", isDirectory: true), "Working group must use a separate host-private Application Support root")
 
     let unavailable = try SharedPaths.resolveAndPrepare(environment: development, groupContainer: { _ in nil }, applicationSupport: { support }, prepare: { try $0.prepare() })
     try check(unavailable.developmentReason == .sharedContainerUnavailable && unavailable.root.lastPathComponent == "RightMouse-Development", "Missing group must use a distinct development directory")
@@ -40,7 +40,7 @@ func runStorageFallbackChecks() throws -> Int {
         _ = try SharedPaths.resolveAndPrepare(environment: production, groupContainer: { _ in group }, applicationSupport: { localLookups += 1; return support }, prepare: { _ in throw denied })
         throw StorageFallbackCheckFailure(description: "Signed/production policy unexpectedly downgraded")
     } catch let error as NSError where error.domain == NSPOSIXErrorDomain && error.code == Int(EACCES) { }
-    try check(localLookups == 0, "Production failure must preserve the original error without touching local storage")
+    try check(localLookups == 1, "Production failure resolves host-private storage but never selects development fallback")
 
     var extensionEnvironment = development; extensionEnvironment.isExtension = true
     localLookups = 0

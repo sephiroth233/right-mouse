@@ -80,7 +80,58 @@ public struct TransferJournalRecord: Codable, Sendable {
     public var sourceIdentity: TransferFileIdentity?
     public var destinationIdentity: TransferFileIdentity?
     public var stagingURL: URL?
+    /// Present only for staging created by versions that can prove ownership.
+    public var stagingIdentity: TransferFileIdentity?
+    public var stagingParentIdentity: TransferFileIdentity?
+    public var stagingCleanupURL: URL?
+    public var stagingCleanupState: StagingCleanupState?
     public var result: TransferItemResult?
+}
+
+public enum StagingCleanupState: String, Codable, Sendable { case requested, completed, needsReview }
+
+public struct StagingCleanupToken: Codable, Sendable {
+    public let operationID: UUID
+    public let itemID: UUID
+    public let journalURL: URL
+    public let stagingURL: URL
+    public let stagingIdentity: TransferFileIdentity
+    public let parentIdentity: TransferFileIdentity
+    public let journalDigest: String
+    public init(operationID: UUID, itemID: UUID, journalURL: URL, stagingURL: URL,
+                stagingIdentity: TransferFileIdentity, parentIdentity: TransferFileIdentity, journalDigest: String) {
+        self.operationID = operationID; self.itemID = itemID; self.journalURL = journalURL; self.stagingURL = stagingURL
+        self.stagingIdentity = stagingIdentity; self.parentIdentity = parentIdentity; self.journalDigest = journalDigest
+    }
+}
+
+public enum StagingRecoveryDisposition: Sendable {
+    case cleanupAllowed(StagingCleanupToken)
+    case legacyEvidenceOnly(String)
+    case retainedForReview(String)
+}
+
+public struct StagingRecoveryItem: Sendable {
+    public let operationID: UUID
+    public let itemID: UUID
+    public let stagingURL: URL?
+    public let occupiedBytes: Int64
+    public let disposition: StagingRecoveryDisposition
+    public init(operationID: UUID, itemID: UUID, stagingURL: URL?, occupiedBytes: Int64, disposition: StagingRecoveryDisposition) {
+        self.operationID = operationID; self.itemID = itemID; self.stagingURL = stagingURL
+        self.occupiedBytes = occupiedBytes; self.disposition = disposition
+    }
+}
+
+public struct StagingRecoveryInspection: Sendable {
+    public let items: [StagingRecoveryItem]
+    public let issues: [TransferRecoveryIssue]
+}
+
+public struct StagingCleanupResult: Sendable {
+    public let operationID: UUID
+    public let itemID: UUID
+    public let removedBytes: Int64
 }
 
 public struct TransferRecoveryIssue: Sendable {

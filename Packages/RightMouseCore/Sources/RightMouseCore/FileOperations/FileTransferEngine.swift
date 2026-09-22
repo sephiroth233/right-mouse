@@ -2,8 +2,8 @@ import Foundation
 import Darwin
 
 public actor FileTransferEngine {
-    private let journalDirectory: URL
-    private var running = false
+    let journalDirectory: URL
+    var running = false
     private var journalFailed = false
     private var ownedStaging: [URL: TransferFileIdentity] = [:]
     // Deterministic fault injection for fixture tests; production always uses volume identity.
@@ -29,7 +29,12 @@ public actor FileTransferEngine {
         journalFailed = false
         defer { running = false }
         var results: [TransferItemResult] = []
-        let destinationDirectory = target.resolvingSymlinksInPath().standardizedFileURL
+        let resolvedTarget = target.resolvingSymlinksInPath()
+        let destinationDirectory: URL
+        if let physical = realpath(resolvedTarget.path, nil) {
+            destinationDirectory = URL(fileURLWithPath: String(cString: physical), isDirectory: true)
+            free(physical)
+        } else { destinationDirectory = resolvedTarget }
         let targetIdentity: TransferFileIdentity
         do { targetIdentity = try TransferFileSystem.identity(destinationDirectory) }
         catch {
@@ -110,7 +115,12 @@ public actor FileTransferEngine {
                 record.stagingURL = container; stagingContainer = container
                 record.phase = "staging"; try save(record)
                 guard mkdir(container.path, 0o700) == 0 else { throw TransferEngineError.system(errno) }
-                ownedStaging[container] = try TransferFileSystem.identity(container)
+                let stagingIdentity = try TransferFileSystem.identity(container)
+                ownedStaging[container] = stagingIdentity
+                record.stagingIdentity = stagingIdentity
+                record.stagingParentIdentity = targetIdentity
+                // Ownership is durable before any payload is copied into staging.
+                try save(record)
                 let staged = container.appendingPathComponent("payload")
                 progress("copying")
                 try phaseHookForTesting?("beforeCopy", source, destination)
@@ -238,7 +248,7 @@ public actor FileTransferEngine {
         ownedStaging.removeValue(forKey: container)
     }
 
-    private func save(_ record: TransferJournalRecord) throws {
+    func save(_ record: TransferJournalRecord) throws {
         do { try saveRaw(record) }
         catch { journalFailed = true; throw error }
     }
@@ -277,7 +287,7 @@ public actor FileTransferEngine {
         return TransferRecoveryScan(records: records, issues: issues)
     }
 
-    private func validatedRecoveryRecord(at url: URL) throws -> TransferJournalRecord {
+    func validatedRecoveryRecord(at url: URL) throws -> TransferJournalRecord {
         guard let fileID = UUID(uuidString: url.deletingPathExtension().lastPathComponent) else { throw TransferEngineError.journalVersion }
         let record = try JSONDecoder().decode(TransferJournalRecord.self, from: PrivateFileIO.read(url, maximumBytes: RequestValidator.maximumBytes))
         guard record.schemaVersion == 1, record.itemID == fileID else { throw TransferEngineError.journalVersion }

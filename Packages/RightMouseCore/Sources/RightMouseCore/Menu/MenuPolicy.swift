@@ -14,6 +14,10 @@ public struct MenuEntry: Identifiable, Sendable {
 
 public enum MenuPolicy {
     public static func entries(configuration: AppConfiguration, context: ActionContext, pendingMove: PendingMoveSnapshot? = nil, now: Date = Date()) -> [MenuEntry] {
+        entries(snapshot: MenuConfigurationSnapshot(configuration: configuration), context: context, pendingMove: pendingMove, now: now)
+    }
+    public static func entries(snapshot configuration: MenuConfigurationSnapshot, context: ActionContext, pendingMove: PendingMoveSnapshot? = nil, now: Date = Date()) -> [MenuEntry] {
+        guard configuration.available else { return [] }
         let selection = !context.selection.isEmpty
         let validCount = context.selection.count <= 1024
         let parents = Set(context.selection.map { $0.url.deletingLastPathComponent().standardizedFileURL.path })

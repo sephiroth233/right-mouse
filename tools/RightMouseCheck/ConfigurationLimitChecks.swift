@@ -29,12 +29,10 @@ func runConfigurationLimitChecks() throws -> Int {
     let bytes = try Data(contentsOf: store.fileURL)
     try check(bytes.count > 2 * 1024 * 1024 && bytes.count < ConfigurationStore.maximumBytes, "fixture does not exercise a valid 2–8 MiB configuration")
     try check(try store.load() == saved && store.load(readOnly: true) == saved, "host cannot roundtrip a valid configuration larger than 2 MiB")
-    // Exact Finder refresh read/decode/validate contract, without loading UI or
-    // using the host corruption-backup path in the extension.
-    let finderBytes = try PrivateFileIO.read(store.fileURL, maximumBytes: ConfigurationStore.maximumBytes)
-    let finderConfig = try JSONDecoder().decode(AppConfiguration.self, from: finderBytes)
-    try finderConfig.validate()
-    try check(finderConfig == saved && finderBytes == bytes, "Finder configuration read contract differs from host persistence")
+    let menu = MenuSnapshotStore(directory: root.appendingPathComponent("Menu"))
+    try menu.publish(saved)
+    let finderConfig = try menu.load()
+    try check(finderConfig == MenuConfigurationSnapshot(configuration: saved), "Finder projection differs from the saved host configuration")
     try check(finderConfig.actions.count == 100 && finderConfig.actions.last?.title == large.actions.last?.title, "large configuration was silently truncated")
 
     let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -48,9 +46,9 @@ func runConfigurationLimitChecks() throws -> Int {
     let exactSaved = try store.save(boundary)
     let exactBytes = try Data(contentsOf: store.fileURL)
     try check(exactBytes.count == ConfigurationStore.maximumBytes, "exact-limit configuration was rejected or encoded at the wrong size")
-    let exactFinder = try JSONDecoder().decode(AppConfiguration.self, from: PrivateFileIO.read(store.fileURL, maximumBytes: ConfigurationStore.maximumBytes))
-    try exactFinder.validate()
-    try check(try store.load() == exactSaved && exactFinder == exactSaved, "exact-limit host/Finder read acceptance differs")
+    try menu.publish(exactSaved)
+    let exactFinder = try menu.load()
+    try check(try store.load() == exactSaved && exactFinder == MenuConfigurationSnapshot(configuration: exactSaved), "exact-limit host/Finder projection acceptance differs")
 
     var tooLarge = exactSaved
     tooLarge.actions[0].title += "x"
@@ -65,6 +63,8 @@ func runConfigurationLimitChecks() throws -> Int {
     let externalStore = ConfigurationStore(directory: externalDirectory)
     try PrivateFileIO.write(try encoder.encode(tooLarge), to: externalStore.fileURL)
     try rejects("host reader accepted over-limit bytes") { _ = try externalStore.load() }
-    try rejects("Finder read contract accepted over-limit bytes") { _ = try PrivateFileIO.read(externalStore.fileURL, maximumBytes: ConfigurationStore.maximumBytes) }
+    let invalidMenu = MenuSnapshotStore(directory: root.appendingPathComponent("OversizedMenu"))
+    try PrivateFileIO.write(Data(repeating: 0x20, count: MenuSnapshotStore.maximumBytes + 1), to: invalidMenu.fileURL)
+    try rejects("Finder snapshot reader accepted over-limit bytes") { _ = try invalidMenu.load() }
     return count
 }

@@ -126,7 +126,7 @@ def check_schemas() -> int:
         return 0
     contracts = FEATURE / "contracts"
     validators = {}
-    for kind in ("request", "response"):
+    for kind in ("request", "response", "menu-snapshot"):
         schema = json.loads((contracts / f"{kind}.schema.json").read_text())
         Draft202012Validator.check_schema(schema)
         validators[kind] = Draft202012Validator(schema, format_checker=FormatChecker())
@@ -175,6 +175,28 @@ def check_schemas() -> int:
     for index, probe in enumerate(negative):
         require(not validators["request"].is_valid(probe), f"Negative schema probe {index} unexpectedly accepted")
         count += 1
+    menu = {"schemaVersion": 1, "revision": 0, "available": True, "compactMenu": False,
+            "conflictPolicy": "skip", "actions": [], "favorites": [], "watchedLocations": [],
+            "recentDestinations": [], "integrations": [], "templates": [{"id": "txt", "name": "文本"}]}
+    require(validators["menu-snapshot"].is_valid(menu), "Minimal menu snapshot rejected")
+    count += 1
+    invalid_menus = []
+    future = copy.deepcopy(menu)
+    future["schemaVersion"] = 2
+    invalid_menus.append(future)
+    template_body = copy.deepcopy(menu)
+    template_body["templates"][0]["body"] = "private content"
+    invalid_menus.append(template_body)
+    location = {"id": valid["requestID"], "name": "目标", "path": "/fixture", "order": 0}
+    bookmark = copy.deepcopy(menu)
+    bookmark["favorites"] = [dict(location, bookmarkData="private grant")]
+    invalid_menus.append(bookmark)
+    oversized = copy.deepcopy(menu)
+    oversized["recentDestinations"] = [location] * 11
+    invalid_menus.append(oversized)
+    for index, probe in enumerate(invalid_menus):
+        require(not validators["menu-snapshot"].is_valid(probe), f"Unsafe menu snapshot probe {index} accepted")
+        count += 1
     return count
 
 
@@ -188,7 +210,7 @@ def main() -> int:
         return 1
     print(f"PASS: {docs} Markdown documents; local links and anchors valid")
     print(f"PASS: {requirements} requirements -> {tasks} tasks -> {cases} acceptance cases; acyclic dependencies")
-    print(f"PASS: 2 JSON Schemas; {probes} positive/negative document probes")
+    print(f"PASS: 3 JSON Schemas; {probes} positive/negative document probes")
     print("Application tests: NOT_RUN; document validation is not product acceptance")
     return 0
 

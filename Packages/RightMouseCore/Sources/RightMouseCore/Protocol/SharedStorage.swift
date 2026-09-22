@@ -25,11 +25,15 @@ public struct SharedPaths: Sendable {
         }
     }
     public let root: URL
+    public let privateRoot: URL
     public let isDevelopmentFallback: Bool
     public let developmentReason: DevelopmentReason?
-    public var configurationDirectory: URL { root.appendingPathComponent("Configuration", isDirectory: true) }
-    public var templatesDirectory: URL { root.appendingPathComponent("Templates", isDirectory: true) }
-    public var operationsDirectory: URL { root.appendingPathComponent("Operations", isDirectory: true) }
+    public var configurationDirectory: URL { privateRoot.appendingPathComponent("Configuration", isDirectory: true) }
+    public var templatesDirectory: URL { privateRoot.appendingPathComponent("Templates", isDirectory: true) }
+    public var operationsDirectory: URL { privateRoot.appendingPathComponent("Operations", isDirectory: true) }
+    public var diagnosticsDirectory: URL { privateRoot.appendingPathComponent("Diagnostics", isDirectory: true) }
+    public var backupsDirectory: URL { privateRoot.appendingPathComponent("Backups", isDirectory: true) }
+    public var menuDirectory: URL { root.appendingPathComponent("Menu", isDirectory: true) }
     public var inboxDirectory: URL { root.appendingPathComponent("Inbox", isDirectory: true) }
     public var receiptsDirectory: URL { root.appendingPathComponent("Receipts", isDirectory: true) }
     public var pendingMoveURL: URL { root.appendingPathComponent("pending-move.json") }
@@ -44,8 +48,11 @@ public struct SharedPaths: Sendable {
         }
         return "开发模式：\(reason)应用内文件操作可用，Finder 右键功能不可用。完成宿主与扩展的 App Group 签名配置后，再验证 Finder 功能。"
     }
-    public init(root: URL, isDevelopmentFallback: Bool = false, developmentReason: DevelopmentReason? = nil) {
-        self.root = root; self.isDevelopmentFallback = isDevelopmentFallback; self.developmentReason = developmentReason
+    /// An omitted privateRoot supports isolated legacy-layout fixtures. Runtime
+    /// host resolution always supplies a distinct host-owned location.
+    public init(root: URL, privateRoot: URL? = nil, isDevelopmentFallback: Bool = false, developmentReason: DevelopmentReason? = nil) {
+        self.root = root; self.privateRoot = privateRoot ?? root
+        self.isDevelopmentFallback = isDevelopmentFallback; self.developmentReason = developmentReason
     }
     /// Read-only path selection used by the Finder extension. It never probes or
     /// creates host storage, and extensions never accept a development override.
@@ -71,13 +78,16 @@ public struct SharedPaths: Sendable {
         if let override = environment.developmentDirectory, !override.isEmpty {
             guard allowLocal else { throw CommandFailure(.accessDenied, "当前构建不允许开发数据目录覆盖。Finder 扩展与正式构建必须使用授权共享容器。") }
             guard override.hasPrefix("/"), !override.contains("\0") else { throw CommandFailure(.invalidRequest, "开发数据目录必须是有效的绝对路径。") }
-            let paths = SharedPaths(root: URL(fileURLWithPath: override, isDirectory: true), isDevelopmentFallback: true, developmentReason: .explicitDirectory)
+            let root = URL(fileURLWithPath: override, isDirectory: true)
+            let paths = SharedPaths(root: root, privateRoot: root.appendingPathComponent("Host", isDirectory: true), isDevelopmentFallback: true, developmentReason: .explicitDirectory)
             try prepare(paths)
             return paths
         }
         let fallbackReason: DevelopmentReason
         if let directory = groupContainer(environment.appGroup) {
-            let shared = SharedPaths(root: directory.appendingPathComponent("RightMouse", isDirectory: true))
+            let root = directory.appendingPathComponent("RightMouse", isDirectory: true)
+            let privateRoot = environment.isExtension ? root : try applicationSupport().appendingPathComponent("RightMouse", isDirectory: true)
+            let shared = SharedPaths(root: root, privateRoot: privateRoot)
             do { try prepare(shared); return shared }
             catch {
                 guard allowLocal else { throw error }
@@ -88,7 +98,7 @@ public struct SharedPaths: Sendable {
             fallbackReason = .sharedContainerUnavailable
         }
         let local = try applicationSupport().appendingPathComponent("RightMouse-Development", isDirectory: true)
-        let paths = SharedPaths(root: local, isDevelopmentFallback: true, developmentReason: fallbackReason)
+        let paths = SharedPaths(root: local, privateRoot: local.appendingPathComponent("Host", isDirectory: true), isDevelopmentFallback: true, developmentReason: fallbackReason)
         try prepare(paths)
         return paths
     }
@@ -96,7 +106,7 @@ public struct SharedPaths: Sendable {
         try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
     }
     public func prepare() throws {
-        for url in [root,configurationDirectory,templatesDirectory,operationsDirectory,inboxDirectory,receiptsDirectory] { try PrivateFileIO.ensureDirectory(url) }
+        for url in [root,privateRoot,configurationDirectory,templatesDirectory,operationsDirectory,menuDirectory,inboxDirectory,receiptsDirectory] { try PrivateFileIO.ensureDirectory(url) }
     }
     private func verifyWritableStorage() throws {
         let marker = UUID().uuidString
