@@ -56,17 +56,24 @@ enum RightMouseApplication {
     @objc private func showSettings() {
         guard let controller else { return }
         if settingsWindow == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 710), styleMask: [.titled,.closable,.miniaturizable,.resizable], backing: .buffered, defer: false)
-            window.title = "RightMouse"; window.isReleasedWhenClosed = false; window.contentViewController = NSHostingController(rootView: RootView(model: controller.model)); window.center(); settingsWindow = window
+            let window = NSWindow(contentRect: NSRect(origin: .zero, size: WindowLayout.settingsSize), styleMask: [.titled,.closable,.miniaturizable,.resizable], backing: .buffered, defer: false)
+            window.title = "RightMouse"; window.isReleasedWhenClosed = false; window.contentViewController = NSHostingController(rootView: RootView(model: controller.model))
+            WindowLayout.prepare(window, preferred: WindowLayout.settingsSize, minimum: WindowLayout.minimumSettingsSize)
+            settingsWindow = window
         }
+        if let settingsWindow { WindowLayout.centerForReopen(settingsWindow) }
         settingsWindow?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
     }
     @objc private func showTasks() {
         guard let controller else { return }
         if tasksWindow == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 560), styleMask: [.titled,.closable,.miniaturizable,.resizable], backing: .buffered, defer: false)
-            window.title = "RightMouse 文件任务"; window.isReleasedWhenClosed = false; window.contentViewController = NSHostingController(rootView: TasksView(model: controller.model)); window.center(); tasksWindow = window
+            window.title = "RightMouse 文件任务"; window.isReleasedWhenClosed = false
+            window.contentViewController = NSHostingController(rootView: TasksView(model: controller.model).padding(.top, 20).background(RightMouseBackdrop()).groupBoxStyle(RightMouseGroupBoxStyle()))
+            WindowLayout.prepare(window, preferred: WindowLayout.tasksSize, minimum: NSSize(width: 600, height: 420))
+            tasksWindow = window
         }
+        if let tasksWindow { WindowLayout.centerForReopen(tasksWindow) }
         tasksWindow?.makeKeyAndOrderFront(nil)
     }
     private func installMenu() {

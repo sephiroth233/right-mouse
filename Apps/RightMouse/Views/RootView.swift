@@ -37,28 +37,41 @@ struct RootView: View {
     @ObservedObject var model: AppModel
     @ViewState private var page: SettingsPage? = .general
     var body: some View {
-        NavigationSplitView {
+        HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 10) {
                     Image(systemName: "cursorarrow.click.2").font(.title).foregroundStyle(.blue)
                     VStack(alignment: .leading) { Text("RightMouse").font(.headline); Text("Finder 效率工具").font(.caption).foregroundStyle(.secondary) }
-                }.padding(.horizontal, 14).padding(.top, 22)
-                List(SettingsPage.allCases, selection: $page) { item in Label(item.rawValue, systemImage: item.icon).tag(item) }
-                    .listStyle(.sidebar)
+                }.padding(.horizontal, 18).padding(.top, 24)
+                ScrollView {
+                    VStack(spacing: 5) {
+                        ForEach(SettingsPage.allCases) { item in
+                            Button { page = item } label: {
+                                Label(item.rawValue, systemImage: item.icon)
+                                    .font(.system(size: 13, weight: page == item ? .semibold : .regular))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 12).padding(.vertical, 11)
+                                    .background(page == item ? Color.accentColor.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 11))
+                                    .contentShape(RoundedRectangle(cornerRadius: 11))
+                            }.buttonStyle(.plain)
+                                .foregroundStyle(page == item ? Color.accentColor : .primary)
+                                .accessibilityAddTraits(page == item ? .isSelected : [])
+                        }
+                    }.padding(.horizontal, 10)
+                }
                 Label(model.extensionEnabled ? "扩展已启用" : "等待启用扩展", systemImage: model.extensionEnabled ? "checkmark.circle.fill" : "circle.dashed")
                     .font(.caption).foregroundStyle(model.extensionEnabled ? .green : .secondary)
                     .padding(.horizontal, 16).padding(.bottom, 16)
-            }.navigationSplitViewColumnWidth(min: 185, ideal: 210, max: 240)
-        } detail: {
+            }.frame(width: 204).rightMouseGlass(radius: 22)
             VStack(alignment: .leading, spacing: 0) {
                 let current = page ?? .general
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(current.rawValue).font(.largeTitle.weight(.semibold))
-                    Text(current.subtitle).foregroundStyle(.secondary)
-                }.padding(28)
+                    Text(current.rawValue).font(.system(size: 27, weight: .semibold, design: .rounded))
+                    Text(current.subtitle).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }.padding(24)
                 if let notice = model.notice {
                     HStack { Image(systemName: "info.circle"); Text(notice).font(.callout); Spacer(); Button { model.notice = nil } label: { Image(systemName: "xmark") }.buttonStyle(.plain).accessibilityLabel("关闭提示") }
-                        .padding(12).background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 8)).padding(.horizontal, 28).padding(.bottom, 12)
+                        .padding(12).background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 12)).padding(.horizontal, 24).padding(.bottom, 12)
                 }
                 if model.isReadOnly { Text("配置版本不兼容，当前为只读。原始文件已保留。请使用支持此配置的应用版本。").foregroundStyle(.orange).padding(.horizontal, 28) }
                 Group {
@@ -73,10 +86,17 @@ struct RootView: View {
                     case .diagnostics: DiagnosticsSettingsView(model: model)
                     case .tasks: TasksView(model: model)
                     }
-                }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                }.frame(maxWidth: 960, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity)
+                    .scrollContentBackground(.hidden)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(.background.opacity(0.72), in: RoundedRectangle(cornerRadius: 22))
         }
-        .frame(minWidth: 820, minHeight: 570)
+        .padding(16)
+        .background(RightMouseBackdrop())
+        .groupBoxStyle(RightMouseGroupBoxStyle())
+        .frame(idealWidth: 960, idealHeight: 650)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in model.refreshDiagnostics() }
         .alert("操作未完成", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("好", role: .cancel) { model.errorMessage = nil } } message: { Text(model.errorMessage ?? "") }
     }

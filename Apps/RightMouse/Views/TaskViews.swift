@@ -94,7 +94,7 @@ struct TasksView: View {
                     }.padding(.horizontal, 28).padding(.bottom, 24).padding(.top, 4)
                 }
             }
-        }.frame(minWidth: 520, minHeight: 320)
+        }.frame(maxWidth: .infinity, minHeight: 320)
             .sheet(item: $model.taskReview) { review in
                 TaskReviewView(model: model, review: review)
                     .id("\(review.id)-\(review.checkedAt.timeIntervalSince1970)")

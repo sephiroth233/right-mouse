@@ -37,9 +37,9 @@ struct MenuSettingsView: View {
                         if preview.isEmpty { Text("没有可见操作").foregroundStyle(.secondary) }
                         ForEach(preview) { entry in MenuPreviewRow(entry: entry) }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
-                }.background(.background, in: RoundedRectangle(cornerRadius: 10)).overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
+                }.rightMouseGlass(radius: 16)
                 Text("与 Finder 共用菜单规则；没有待移动文件时不显示粘贴。系统菜单中的最终位置由 Finder 决定。").font(.caption).foregroundStyle(.secondary)
-            }.frame(width: 255)
+            }.frame(minWidth: 205, idealWidth: 225, maxWidth: 245)
         }.padding(.horizontal, 28).padding(.bottom, 24)
     }
     private func move(_ index: Int, _ delta: Int) {
