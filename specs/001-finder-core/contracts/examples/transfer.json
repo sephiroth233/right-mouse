@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "requestID": "10000000-0000-4000-8000-000000000002",
+  "producerInstanceID": "20000000-0000-4000-8000-000000000001",
+  "createdAt": "2026-09-22T14:00:00Z",
+  "expiresAt": "2026-09-22T14:02:00Z",
+  "context": {
+    "invocationID": "40000000-0000-4000-8000-000000000001",
+    "entryPoint": "items",
+    "container": {
+      "refID": "30000000-0000-4000-8000-000000000001",
+      "fileURL": "file:///private/tmp/RightMouse-TestFixtures/Destination/",
+      "kindHint": "directory"
+    },
+    "selection": [
+      {
+        "refID": "30000000-0000-4000-8000-000000000002",
+        "fileURL": "file:///private/tmp/RightMouse-TestFixtures/Source/example.md",
+        "kindHint": "file"
+      }
+    ]
+  },
+  "action": {
+    "type": "transfer",
+    "mode": "move",
+    "destination": {
+      "refID": "30000000-0000-4000-8000-000000000001",
+      "fileURL": "file:///private/tmp/RightMouse-TestFixtures/Destination/",
+      "kindHint": "directory"
+    },
+    "conflictPolicy": "ask"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "requestID": "10000000-0000-4000-8000-000000000002",
+  "revision": 4,
+  "status": "partial",
+  "updatedAt": "2026-09-22T14:01:00Z",
+  "itemResults": [
+    {
+      "itemID": "50000000-0000-4000-8000-000000000001",
+      "status": "sourceRetained",
+      "destinationURL": "file:///private/tmp/RightMouse-TestFixtures/Destination/example.md",
+      "error": {
+        "code": "SOURCE_RETAINED",
+        "message": "目标已生成，源文件仍保留，请核对。",
+        "retryable": false
+      }
+    }
+  ],
+  "error": {
+    "code": "SOURCE_RETAINED",
+    "message": "移动尚未完整完成。",
+    "retryable": false
+  }
+}

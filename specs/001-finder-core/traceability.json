@@ -1,0 +1,621 @@
+{
+  "schemaVersion": 1,
+  "feature": "001-finder-core",
+  "version": "0.1.0",
+  "requirements": [
+    {
+      "id": "FR-001",
+      "tasks": [
+        "T003",
+        "T008",
+        "T020"
+      ],
+      "cases": [
+        "AC-001",
+        "AC-002"
+      ]
+    },
+    {
+      "id": "FR-002",
+      "tasks": [
+        "T012",
+        "T020"
+      ],
+      "cases": [
+        "AC-003",
+        "AC-004"
+      ]
+    },
+    {
+      "id": "FR-003",
+      "tasks": [
+        "T012",
+        "T017",
+        "T020"
+      ],
+      "cases": [
+        "AC-005"
+      ]
+    },
+    {
+      "id": "FR-004",
+      "tasks": [
+        "T013",
+        "T020"
+      ],
+      "cases": [
+        "AC-006"
+      ]
+    },
+    {
+      "id": "FR-005",
+      "tasks": [
+        "T013",
+        "T020"
+      ],
+      "cases": [
+        "AC-007"
+      ]
+    },
+    {
+      "id": "FR-006",
+      "tasks": [
+        "T013",
+        "T015",
+        "T020"
+      ],
+      "cases": [
+        "AC-008",
+        "AC-009"
+      ]
+    },
+    {
+      "id": "FR-007",
+      "tasks": [
+        "T014",
+        "T015",
+        "T020"
+      ],
+      "cases": [
+        "AC-010",
+        "AC-011"
+      ]
+    },
+    {
+      "id": "FR-008",
+      "tasks": [
+        "T014",
+        "T017",
+        "T020"
+      ],
+      "cases": [
+        "AC-012"
+      ]
+    },
+    {
+      "id": "FR-009",
+      "tasks": [
+        "T016",
+        "T020"
+      ],
+      "cases": [
+        "AC-013",
+        "AC-014"
+      ]
+    },
+    {
+      "id": "FR-010",
+      "tasks": [
+        "T007",
+        "T008",
+        "T017",
+        "T020"
+      ],
+      "cases": [
+        "AC-015"
+      ]
+    },
+    {
+      "id": "FR-011",
+      "tasks": [
+        "T004",
+        "T009",
+        "T018",
+        "T020"
+      ],
+      "cases": [
+        "AC-016",
+        "AC-017"
+      ]
+    },
+    {
+      "id": "FR-012",
+      "tasks": [
+        "T011",
+        "T019",
+        "T020"
+      ],
+      "cases": [
+        "AC-018",
+        "AC-021",
+        "AC-022",
+        "AC-024"
+      ]
+    },
+    {
+      "id": "FR-013",
+      "tasks": [
+        "T005",
+        "T010",
+        "T011",
+        "T020"
+      ],
+      "cases": [
+        "AC-023",
+        "AC-025",
+        "AC-026"
+      ]
+    },
+    {
+      "id": "FR-014",
+      "tasks": [
+        "T002",
+        "T022",
+        "T023"
+      ],
+      "cases": [
+        "AC-030"
+      ]
+    },
+    {
+      "id": "NFR-001",
+      "tasks": [
+        "T011",
+        "T015",
+        "T019",
+        "T020"
+      ],
+      "cases": [
+        "AC-004",
+        "AC-009",
+        "AC-010",
+        "AC-019",
+        "AC-020",
+        "AC-021",
+        "AC-022",
+        "AC-023",
+        "AC-024"
+      ]
+    },
+    {
+      "id": "NFR-002",
+      "tasks": [
+        "T008",
+        "T021"
+      ],
+      "cases": [
+        "AC-027"
+      ]
+    },
+    {
+      "id": "NFR-003",
+      "tasks": [
+        "T007",
+        "T009",
+        "T010",
+        "T020"
+      ],
+      "cases": [
+        "AC-025",
+        "AC-026"
+      ]
+    },
+    {
+      "id": "NFR-004",
+      "tasks": [
+        "T010",
+        "T018",
+        "T021"
+      ],
+      "cases": [
+        "AC-028"
+      ]
+    },
+    {
+      "id": "NFR-005",
+      "tasks": [
+        "T017",
+        "T018",
+        "T019",
+        "T021"
+      ],
+      "cases": [
+        "AC-029"
+      ]
+    },
+    {
+      "id": "NFR-006",
+      "tasks": [
+        "T001",
+        "T003",
+        "T006",
+        "T021"
+      ],
+      "cases": [
+        "AC-031"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "T001",
+      "dependsOn": [],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T002",
+      "dependsOn": [
+        "T001"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T003",
+      "dependsOn": [
+        "T002"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T004",
+      "dependsOn": [
+        "T002"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T005",
+      "dependsOn": [
+        "T003",
+        "T004"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T006",
+      "dependsOn": [
+        "T003",
+        "T004",
+        "T005"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T007",
+      "dependsOn": [
+        "T006"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T008",
+      "dependsOn": [
+        "T007"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T009",
+      "dependsOn": [
+        "T004",
+        "T007"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T010",
+      "dependsOn": [
+        "T005",
+        "T007",
+        "T009"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T011",
+      "dependsOn": [
+        "T007",
+        "T010"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T012",
+      "dependsOn": [
+        "T008",
+        "T009",
+        "T010",
+        "T011"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T013",
+      "dependsOn": [
+        "T008",
+        "T010"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T014",
+      "dependsOn": [
+        "T009",
+        "T010"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T015",
+      "dependsOn": [
+        "T011",
+        "T013",
+        "T014"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T016",
+      "dependsOn": [
+        "T009",
+        "T010"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T017",
+      "dependsOn": [
+        "T008",
+        "T012",
+        "T014",
+        "T016"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T018",
+      "dependsOn": [
+        "T009",
+        "T010",
+        "T017"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T019",
+      "dependsOn": [
+        "T011",
+        "T015",
+        "T017"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T020",
+      "dependsOn": [
+        "T012",
+        "T013",
+        "T014",
+        "T015",
+        "T016",
+        "T018",
+        "T019"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T021",
+      "dependsOn": [
+        "T017",
+        "T018",
+        "T019",
+        "T020"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T022",
+      "dependsOn": [
+        "T021"
+      ],
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "T023",
+      "dependsOn": [
+        "T022"
+      ],
+      "status": "pending",
+      "evidence": []
+    }
+  ],
+  "cases": [
+    {
+      "id": "AC-001",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-002",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-003",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-004",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-005",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-006",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-007",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-008",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-009",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-010",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-011",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-012",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-013",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-014",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-015",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-016",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-017",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-018",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-019",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-020",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-021",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-022",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-023",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-024",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-025",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-026",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-027",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-028",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-029",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-030",
+      "status": "NOT_RUN",
+      "evidence": []
+    },
+    {
+      "id": "AC-031",
+      "status": "NOT_RUN",
+      "evidence": []
+    }
+  ]
+}

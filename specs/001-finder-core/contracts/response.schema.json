@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RightMouse command response v1",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "requestID": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "status": {
+      "enum": [
+        "accepted",
+        "planning",
+        "waitingForUser",
+        "running",
+        "cancelling",
+        "completed",
+        "partial",
+        "failed",
+        "cancelled",
+        "needsReview",
+        "rejected"
+      ]
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "itemResults": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "type": "object",
+        "properties": {
+          "itemID": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "enum": [
+              "success",
+              "skipped",
+              "failed",
+              "cancelled",
+              "sourceRetained",
+              "needsReview"
+            ]
+          },
+          "destinationURL": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^file:///",
+            "maxLength": 16384
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/error"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "itemID",
+          "status",
+          "error"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/error"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "requestID",
+    "revision",
+    "status",
+    "updatedAt",
+    "itemResults",
+    "error"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_REQUEST",
+            "UNSUPPORTED_VERSION",
+            "REQUEST_EXPIRED",
+            "REQUEST_ID_CONFLICT",
+            "CONTEXT_UNAVAILABLE",
+            "LIMIT_EXCEEDED",
+            "ACCESS_DENIED",
+            "BOOKMARK_STALE",
+            "SOURCE_MISSING",
+            "SOURCE_CHANGED",
+            "DESTINATION_CONFLICT",
+            "INVALID_DESTINATION",
+            "NO_SPACE",
+            "VOLUME_UNAVAILABLE",
+            "APP_UNAVAILABLE",
+            "AUTOMATION_DENIED",
+            "IO_FAILED",
+            "METADATA_UNSUPPORTED",
+            "SOURCE_RETAINED",
+            "RECOVERY_REQUIRED",
+            "CANCELLED"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

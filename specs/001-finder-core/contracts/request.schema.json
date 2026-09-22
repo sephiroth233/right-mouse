@@ -1,0 +1,278 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RightMouse command request v1",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "requestID": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "producerInstanceID": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "invocationID": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entryPoint": {
+          "enum": [
+            "items",
+            "container",
+            "sidebar",
+            "toolbar"
+          ]
+        },
+        "container": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/fileReference"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "selection": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/$defs/fileReference"
+          }
+        }
+      },
+      "required": [
+        "invocationID",
+        "entryPoint",
+        "container",
+        "selection"
+      ],
+      "additionalProperties": false
+    },
+    "action": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "createFile"
+            },
+            "templateID": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "destination": {
+              "$ref": "#/$defs/fileReference"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "required": [
+            "type",
+            "templateID",
+            "destination"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "copyText"
+            },
+            "format": {
+              "enum": [
+                "path",
+                "name",
+                "stem",
+                "shellPath"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "format"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "stageMove"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "pasteMove"
+            },
+            "pendingToken": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "destination": {
+              "$ref": "#/$defs/fileReference"
+            },
+            "conflictPolicy": {
+              "enum": [
+                "ask",
+                "skip",
+                "keepBoth"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "pendingToken",
+            "destination",
+            "conflictPolicy"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "transfer"
+            },
+            "mode": {
+              "enum": [
+                "copy",
+                "move"
+              ]
+            },
+            "destination": {
+              "$ref": "#/$defs/fileReference"
+            },
+            "conflictPolicy": {
+              "enum": [
+                "ask",
+                "skip",
+                "keepBoth"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "mode",
+            "destination",
+            "conflictPolicy"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "openFavorite"
+            },
+            "favoriteID": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "type",
+            "favoriteID"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "openWith"
+            },
+            "integrationID": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "mode": {
+              "enum": [
+                "files",
+                "directory"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "integrationID",
+            "mode"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "requestID",
+    "producerInstanceID",
+    "createdAt",
+    "expiresAt",
+    "context",
+    "action"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "fileReference": {
+      "type": "object",
+      "properties": {
+        "refID": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "fileURL": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^file:///",
+          "maxLength": 16384
+        },
+        "kindHint": {
+          "enum": [
+            "file",
+            "directory",
+            "symlink",
+            "unknown"
+          ]
+        },
+        "bookmarkToken": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "refID",
+        "fileURL",
+        "kindHint"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
