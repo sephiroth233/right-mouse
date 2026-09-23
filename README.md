@@ -14,9 +14,9 @@
 
 ## 安装
 
-当前提供 **0.2.0 本机预览版**。已有 Apple Silicon（arm64）安装包，在 macOS 27 上完成本机验证；最低编译目标为 macOS 14，其他系统版本尚待验证。
+当前提供 **0.2.0 本机预览版**，包含 Apple Silicon（arm64）和 Intel（x86_64）安装包。最低编译目标为 macOS 14；两个架构已通过 macOS 26 自动构建与检查，真实 Finder 交互在 macOS 27 上完成本机验证。
 
-1. 获取 `RightMouse-0.2.0-local-arm64.dmg`，打开后将 **RightMouse.app** 拖入 **Applications（应用程序）**。
+1. 从 [发行版页面](https://github.com/sephiroth233/right-mouse/releases) 下载适合你的 Mac 的 DMG（M 系列选 `arm64`，Intel 选 `x86_64`），打开后将 **RightMouse.app** 拖入 **Applications（应用程序）**。
 2. 打开 RightMouse。当前版本未经过 Apple 公证；若系统阻止启动，可在「系统设置 → 隐私与安全性」中选择「仍要打开」。
 3. 在应用的「权限与诊断」中打开扩展设置，启用 **RightMouse Finder 扩展**。
 4. 确认应用显示「已连接」，在 Finder 的普通本地文件夹中右键即可使用。在「菜单管理」中调整常用操作的位置。
@@ -38,7 +38,7 @@ scripts/package-local-app.sh --no-build
 
 ## 自动构建
 
-GitHub Actions 已配置为在推送到 `main`、提交 PR 或手动触发时运行检查，分别构建 Apple Silicon 和 Intel DMG。工作流推送并运行成功后，可在 **Actions → Build macOS DMG → 对应运行 → Artifacts** 下载安装包及 SHA-256 校验文件。详见 [自动构建说明](docs/ci.md)。
+GitHub Actions 在推送到 `main`、提交 PR 或手动触发时运行检查，分别构建 Apple Silicon 和 Intel DMG。推送 `v*` 版本标签后，通过检查的安装包会自动发布到 **Releases（发行版）**。日常构建仍可在 Actions 的 Artifacts 中下载。详见 [自动构建说明](docs/ci.md)。
 
 ## 开发文档
 

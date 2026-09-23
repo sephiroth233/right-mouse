@@ -4,7 +4,7 @@
 
 GitHub Actions 复用本机预览版脚本，检查代码并分别生成 Apple Silicon（arm64）和 Intel（x86_64）DMG。使用临时构建签名，不需要 Apple Developer 账号、证书 Secrets 或 App Group。产物不经过 Apple 公证。
 
-触发条件为推送到 `main`、以 `main` 为目标的 Pull Request，以及 Actions 页面手动运行。产物仅保存到对应运行的 Artifacts，不自动创建 Release、推送提交或标签。手动运行入口需要工作流已存在于默认分支。
+触发条件为推送到 `main`、以 `main` 为目标的 Pull Request、推送 `v*` 版本标签，以及 Actions 页面手动运行。日常构建保存到 Artifacts；版本标签构建会在两个架构均通过后自动发布 GitHub 预览发行版。工作流不推送提交或创建标签。手动运行入口需要工作流已存在于默认分支。
 
 ## 流程与验收条件
 
@@ -15,13 +15,21 @@ GitHub Actions 复用本机预览版脚本，检查代码并分别生成 Apple S
 5. 校验宿主、Finder 扩展和连接服务的架构、嵌套签名、DMG 镜像及 SHA-256；保存提交、版本、SDK 和构建身份元数据。
 6. 上传 DMG、SHA-256、构建信息，保留 14 天；构建日志即使失败也上传，保留 7 天。同一分支或 PR 的新运行取消尚未完成的旧运行。
 
-工作流仅授予 `contents: read`；第三方 Actions 固定到完整提交 SHA，checkout 不持久化仓库凭据。PR 使用普通 `pull_request` 事件。只上传明确列出的发行文件和日志，不上传整个构建目录、临时钥匙串或私钥。
+检查和构建任务仅授予 `contents: read`；仅版本标签的发布任务授予 `contents: write`。第三方 Actions 固定到完整提交 SHA，checkout 不持久化仓库凭据。PR 使用普通 `pull_request` 事件。只上传明确列出的发行文件和日志，不上传整个构建目录、临时钥匙串或私钥。
 
 ## 下载与使用
 
-工作流推送到 GitHub 并运行成功后，在仓库 **Actions → Build macOS DMG → 对应运行 → Artifacts** 下载匹配架构的产物。解压 Actions 产物后，按[安装说明](local-install.md)安装其中的 DMG。
+已发布版本从仓库右侧 **Releases（发行版）** 下载匹配架构的 DMG。日常构建在 **Actions → Build macOS DMG → 对应运行 → Artifacts** 下载。解压 Actions 产物后，按[安装说明](local-install.md)安装其中的 DMG。
 
-每个架构单独生成完整配套的宿主、扩展和服务；升级时替换整个应用，不混用不同运行中的组件。Actions 产物有保留期限，稳定公开下载仍需后续发布 Release。
+每个架构单独生成完整配套的宿主、扩展和服务；升级时替换整个应用，不混用不同运行中的组件。Actions 产物有保留期限，Releases 资产不受该期限影响。
+
+## 发布版本
+
+更新应用版本和 [发行说明](release-notes.md)后，创建并推送 `vX.Y.Z` 或 `vX.Y.Z-local.N` 标签。标签中的 `X.Y.Z` 必须与构建产物中的应用版本一致；当前构建脚本的版本为 `0.2.0`。建议使用带注释标签，每次预览发布递增 `local.N`，不要移动已发布标签。
+
+标签触发两种架构重新构建。发布任务仅下载同次运行的安装包，检查两个架构齐全、源码提交和版本匹配、DMG 校验和正确，再暂存六个发行附件。先创建草稿并上传全部附件，成功后公开为预览版；上传失败保持草稿，重试只能更新草稿，不覆盖已发布资产。当前发布路线始终标记预览版，Apple 公证发行需另行配置。
+
+首次 `v0.2.0-local.1` 使用已通过的运行 `35820867854` 的两个原始安装包，标签指向对应源码 `f3b1bd4`，通过相同的准备和发布脚本归档；后续标签使用工作流自动发布。
 
 ## 验证边界
 
@@ -44,3 +52,4 @@ GitHub Actions 复用本机预览版脚本，检查代码并分别生成 Apple S
 - [macOS 26 ARM 镜像工具链](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md)
 - [macOS 26 Intel 镜像工具链](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md)
 - [Artifact 上传与保留设置](https://github.com/actions/upload-artifact)
+- [GitHub Releases](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases)
