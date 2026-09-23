@@ -73,7 +73,8 @@ final class FinderSync: FIFinderSync {
         guard localMode, let payload = notification.object as? String,
               let layout = try? LocalMenuLayout.decode(payload) else { return }
         // Only fixed built-in IDs and two presentation preferences cross this
-        // unauthenticated channel. Actual operations keep their confirmation.
+        // unauthenticated channel. It cannot authorize operations; those require
+        // authenticated XPC or the legacy URL confirmation.
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             let snapshot = MenuConfigurationSnapshot(configuration: layout.configuration)
@@ -271,6 +272,7 @@ final class FinderSync: FIFinderSync {
             logger.error("Embedding host layout mismatch"); return
         }
         let options = NSWorkspace.OpenConfiguration(); options.activates = dispatchURL?.host == "wake" ? false : (localMode || dispatchURL == nil)
+        if dispatchURL?.host == "wake" { options.arguments = ["--finder-wake"] }
         if let dispatchURL {
             NSWorkspace.shared.open([dispatchURL], withApplicationAt: host, configuration: options) { [weak self] _, error in
                 if error != nil { self?.logger.error("Host wake failed; queued request retained") }

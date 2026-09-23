@@ -1,0 +1,61 @@
+# RightMouse 本机版安装与升级
+
+本机版不需要 Apple Developer 账号或 App Group，使用本机构建证书认证组件。未经过 Apple 公证，首次安装需要手动允许运行。最低编译目标为 macOS 14；当前真实 Finder 验收环境为 macOS 27，其他版本尚待测试。
+
+## 目录
+
+- [安装](#安装)
+- [正常使用和权限](#正常使用和权限)
+- [升级与排障](#升级与排障)
+- [停用与卸载](#停用与卸载)
+- [从源码构建](#从源码构建)
+- [参考](#参考)
+
+## 安装
+
+1. 从项目发布页取得适合本机架构的 DMG，并核对同版本提供的 SHA-256。打开 DMG，将 RightMouse.app 拖入 Applications。
+2. 在“应用程序”中打开 RightMouse。若系统阻止运行，检查“系统设置 → 隐私与安全性”中的“仍要打开”。仅对你核实过来源的版本操作。
+3. 如果仍提示未验证开发者、文件损坏，或扩展受隔离影响，在终端执行下面只作用于本应用的命令，再重新打开应用。不要关闭 Gatekeeper、SIP 或整个系统的安全检查。
+4. 在 RightMouse 的“权限与诊断”打开扩展设置，启用 RightMouse Finder 扩展。首次启动会为当前用户安装一个按需启动的连接服务；不需要管理员密码。界面应显示“本机连接已就绪”。
+5. 在普通本地文件夹空白处或文件上右键，使用 RightMouse 的新建、复制路径和打开方式。菜单管理支持把常用项目移到第一级。
+
+```bash
+xattr -dr com.apple.quarantine '/Applications/RightMouse.app'
+open '/Applications/RightMouse.app'
+```
+
+此命令只移除该应用的下载隔离标记，不替你验证下载来源；如果文件确实损坏，必须重新下载。不要重新 ad-hoc 签名已下载的本机版，否则组件证书会不匹配。用户无需导入、信任任何根证书，也无需安装编译工具。
+
+## 正常使用和权限
+
+来源经过认证的 Finder 请求无需逐次点击“确认这次文件操作”。选择复制/移动目标、同名冲突、文件访问权限和首次自动化授权仍会按需提示。外部 `rightmouse://local-action` 链接继续显示来源确认，不能伪装为 Finder 的可信请求。
+
+本机菜单当前提供内置模板和打开方式；自定义模板、应用及常用目录请在应用内使用。没有要求辅助功能、完全磁盘访问或管理员权限。退出主应用后，下次 Finder 操作会再次唤醒主应用。
+
+## 升级与排障
+
+升级前退出 RightMouse，用新版本替换整个应用，再打开。每次构建身份不同，新旧扩展不能混用；若右键操作提示失败，先在“通用 → 本机连接”点击“启用或修复连接”，再在系统设置中关闭并重新启用扩展。必要时注销后重新登录。不要在同一台机器保留并同时打开多个版本。
+
+连接服务只转交主应用连接，不处理文件或保存路径。启动项是当前用户的 `~/Library/LaunchAgents/cn.rightmouse.local-bridge.plist`。服务不能连接时不会自动把命令发送到其他应用。若操作发送后超时，先检查任务记录和目标文件，不要连续重复点击。
+
+## 停用与卸载
+
+在“通用 → 本机连接”点击“停用并移除服务”，退出 RightMouse，然后将应用移到废纸篓。设置和任务记录保留；不自动删除用户文件。
+
+如果应用已删除，退出仍在运行的 RightMouse，运行 DMG 内的“卸载本机连接服务.command”。它只移除本应用的用户级服务和启动项，并记录停用偏好。重新安装后可在应用内点击“启用或修复连接”。
+
+## 从源码构建
+
+安装 Xcode Command Line Tools 后，在仓库根目录运行：
+
+```bash
+python3 scripts/build-local-app.py
+scripts/package-local-app.sh --no-build
+```
+
+构建过程使用临时钥匙串生成自签名代码身份，签名完成后销毁私钥和钥匙串，不修改系统证书信任。DMG 位于 `dist`。正式 Developer ID 签名、公证和 App Group 路线仍由 `scripts/package-app.sh --release` 单独提供。
+
+## 参考
+
+- [Apple：打开来自身份不明开发者的 Mac App](https://support.apple.com/zh-cn/guide/mac-help/mh40616/mac)
+- [Apple：代码签名任务与自签名证书](https://developer.apple.com/library/archive/documentation/Security/Conceptual/CodeSigningGuide/Procedures/Procedures.html)

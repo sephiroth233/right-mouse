@@ -79,9 +79,9 @@ struct RootView: View {
                     Text(current.subtitle).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }.padding(24)
                 if model.isDevelopmentStorage {
-                    Label(model.isLocalFinderMode ? (model.authenticatedXPCBuild ? model.localServiceStatus : "本机模式 · Finder 使用内置菜单，文件操作将在应用中确认。") : "开发模式 · Finder 菜单暂不可用。可在文件操作台使用本地功能。", systemImage: "exclamationmark.triangle")
+                    Label(model.isLocalFinderMode ? (model.authenticatedXPCBuild ? model.localServiceStatus : "本机模式 · Finder 使用内置菜单，文件操作将在应用中确认。") : "开发模式 · Finder 菜单暂不可用。可在文件操作台使用本地功能。", systemImage: model.localServiceReady ? "checkmark.shield" : "exclamationmark.triangle")
                         .font(.callout).fixedSize(horizontal: false, vertical: true)
-                        .padding(12).background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+                        .padding(12).background((model.localServiceReady ? Color.green : Color.orange).opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
                         .padding(.horizontal, 24).padding(.bottom, 12)
                 }
                 if let notice = model.notice {
@@ -130,14 +130,23 @@ private struct GeneralSettingsView: View {
                 SetupExerciseView(model: model, showTasks: { navigate(.tasks) })
                 SetupStep(number: 4, title: "定制右键菜单", subtitle: model.isLocalFinderMode ? "选择内置操作放到 Finder 一级菜单，其余操作可收进子菜单。" : "新建文件、复制路径、剪切移动与打开方式。", complete: false) { navigate(.menus) }
             }
+            if model.authenticatedXPCBuild {
+                Section("本机连接") {
+                    Text(model.localServiceStatus).font(.callout)
+                    HStack {
+                        Button("启用或修复连接") { model.onRepairLocalService?() }
+                        Button("停用并移除服务") { model.onStopLocalService?() }
+                    }
+                }
+            }
             Section("偏好设置") {
                 Toggle("登录时启动 RightMouse", isOn: Binding(get: { model.configuration.launchAtLogin }, set: model.setLaunchAtLogin))
                 Toggle("新建文件后在 Finder 中定位", isOn: model.binding(\.revealCreatedFile))
                 Toggle("将未置顶的操作收进 RightMouse 子菜单", isOn: model.binding(\.compactMenu))
             }.disabled(model.isReadOnly)
             Section {
-                LabeledContent("版本", value: "0.1.0 · 开发版")
-                Text("开发版用于本机验证。正式签名、公证和各系统兼容性以交付验证记录为准。")
+                LabeledContent("版本", value: (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0") + (model.authenticatedXPCBuild ? " · 本机版" : " · 开发版"))
+                Text(model.authenticatedXPCBuild ? "无需开发者账号。本机版未经过 Apple 公证，首次安装请按随包说明允许运行。" : "开发版用于本机验证。正式签名、公证和各系统兼容性以交付验证记录为准。")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }.formStyle(.grouped)
