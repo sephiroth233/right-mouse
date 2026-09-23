@@ -545,8 +545,9 @@ import Darwin
         return FileReference(url: url, kindHint: values?.isSymbolicLink == true ? .symlink : (values?.isDirectory == true ? .directory : .file))
     }
     private func resolveAccess(for request: CommandRequest, interactive: Bool) throws -> [URL] {
-        // Interactive calls originate from a system picker or an explicit local URL
-        // confirmation in this process. Shared-queue Finder requests
+        // Interactive calls originate from a system picker, a system Services
+        // invocation, authenticated XPC, or an explicit local URL confirmation.
+        // Shared-queue Finder requests
         // must stay within configured, bookmark-resolved roots; a URL is not a grant.
         var references = request.context.selection.map(\.url)
         if case .pasteMove = request.action, let pending { references.append(contentsOf: pending.files.map(\.url)) }

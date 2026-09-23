@@ -25,6 +25,7 @@ enum RightMouseApplication {
     private var settingsWindow: NSWindow?
     private var tasksWindow: NSWindow?
     private var statusItem: NSStatusItem?
+    private let finderServices = FinderServicesProvider()
     private var receivedDispatch = false
     private var launchPolicy = ApplicationLaunchPolicy()
     private var initialLaunchFinished = false
@@ -34,6 +35,10 @@ enum RightMouseApplication {
     private var statusItemSubscription: AnyCancellable?
     private let logger = Logger(subsystem: "cn.rightmouse.RightMouse", category: "URLDispatch")
     func applicationWillFinishLaunching(_ notification: Notification) {
+        finderServices.onInvocation = { [weak self] in self?.receivedDispatch = true }
+        finderServices.configuration = { [weak self] in self?.controller?.model.configuration }
+        finderServices.submit = { [weak self] request in self?.controller?.submit(request, interactive: true) ?? false }
+        NSApp.servicesProvider = finderServices
         launchPolicy.observe(NSAppleEventManager.shared().currentAppleEvent)
         NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleURL(_:reply:)),
             forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
@@ -112,7 +117,7 @@ enum RightMouseApplication {
     }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         let event = NSAppleEventManager.shared().currentAppleEvent
-        if ApplicationLaunchPolicy.isLoginEvent(event) { return false }
+        if ApplicationLaunchPolicy.isLoginEvent(event) || ApplicationLaunchPolicy.isServiceEvent(event) { return false }
         showSettings(); return true
     }
     func windowWillClose(_ notification: Notification) {

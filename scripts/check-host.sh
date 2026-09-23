@@ -18,6 +18,7 @@ xcrun swiftc "${common[@]}" \
   Apps/RightMouse/AppModel.swift \
   Apps/RightMouse/ApplicationLauncher.swift \
   Apps/RightMouse/ApplicationLaunchPolicy.swift \
+  Apps/RightMouse/FinderServices.swift \
   Apps/RightMouse/OpenWithPlanning.swift \
   Apps/RightMouse/OpenWithInteraction.swift \
   Apps/RightMouse/ConflictDialog.swift \
