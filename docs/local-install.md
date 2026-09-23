@@ -59,3 +59,11 @@ scripts/package-local-app.sh --no-build
 
 - [Apple：打开来自身份不明开发者的 Mac App](https://support.apple.com/zh-cn/guide/mac-help/mh40616/mac)
 - [Apple：代码签名任务与自签名证书](https://developer.apple.com/library/archive/documentation/Security/Conceptual/CodeSigningGuide/Procedures/Procedures.html)
+
+## 启动、关闭窗口与图标
+
+通用设置中的“登录时启动 RightMouse”启用后，系统登录时仅在后台运行，不打开设置窗口、不显示 Dock 图标。手动打开应用仍会显示设置。系统要求允许登录项时，按设置页提示完成允许。
+
+红色关闭按钮只关闭窗口；最后一个窗口关闭后 Dock 图标隐藏，Finder 功能继续运行。最小化窗口不等于关闭，完全退出请使用“退出 RightMouse”或设置窗口激活时按 Cmd+Q。
+
+“在菜单栏显示图标”控制屏幕顶部图标，修改立即生效并保存。两个图标都隐藏后，通过 Spotlight、“应用程序”中的 RightMouse，或 Finder 右键的“RightMouse 设置…”重新打开。
