@@ -49,14 +49,6 @@ public enum MenuPolicy {
                     var children = configuration.favorites.sorted { $0.order < $1.order }.map {
                         MenuEntry(id: "\(mode.rawValue).\($0.id)", title: $0.name, enabled: validCount, action: .transfer(mode: mode, destination: FileReference(refID: $0.id, url: URL(fileURLWithPath: $0.path, isDirectory: true), kindHint: .directory, bookmarkToken: $0.id), conflictPolicy: policy))
                     }
-                    let favoritePaths = Set(configuration.favorites.map { URL(fileURLWithPath: $0.path, isDirectory: true).standardizedFileURL.path })
-                    let recent = configuration.recentDestinations.filter { !favoritePaths.contains(URL(fileURLWithPath: $0.path, isDirectory: true).standardizedFileURL.path) }
-                    if !recent.isEmpty {
-                        children.append(MenuEntry(id: "\(mode.rawValue).recent", title: "最近目标", children: recent.map {
-                            MenuEntry(id: "\(mode.rawValue).recent.\($0.id)", title: $0.name, enabled: validCount,
-                                      action: .transfer(mode: mode, destination: FileReference(refID: $0.id, url: URL(fileURLWithPath: $0.path, isDirectory: true), kindHint: .directory, bookmarkToken: $0.id), conflictPolicy: policy))
-                        }))
-                    }
                     children.append(MenuEntry(id: "\(mode.rawValue).choose", title: "选择目录…", enabled: validCount, action: .transfer(mode: mode, destination: nil, conflictPolicy: policy)))
                     entry = MenuEntry(id: configured.id, title: configured.title, children: children)
                 }

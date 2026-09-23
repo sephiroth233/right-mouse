@@ -75,12 +75,18 @@ func runRecentDestinationChecks() throws -> Int {
         for entry in entries { if entry.id == id { return entry }; if let nested = find(id, in: entry.children) { return nested } }
         return nil
     }
-    let recentMenu = find("copy.recent", in: menu)
-    try check(recentMenu?.children.count == 9, "recent copy destinations were not deduplicated against favorites")
-    try check(recentMenu?.children.first?.id == "copy.recent.\(history[1].id)", "menu did not retain LRU order")
-    guard case let .transfer(mode, destination, _)? = recentMenu?.children.first?.action else { throw RecentCheckFailure(description: "recent target has no transfer action") }
-    try check(mode == .copy && destination?.bookmarkToken == history[1].id && destination?.refID == history[1].id, "recent menu omitted the host-verifiable identity token")
-    try check(find("move.recent", in: menu)?.children.count == 9, "recent destinations missing from move menu")
+    try check(find("copy.recent", in: menu) == nil, "legacy history must not reintroduce recent copy destinations")
+    try check(find("move.recent", in: menu) == nil, "legacy history must not reintroduce recent move destinations")
+    for mode in [CommandTransferMode.copy, .move] {
+        let favoriteID = config.favorites[0].id
+        guard case let .transfer(actualMode, destination, policy)? = find("\(mode.rawValue).\(favoriteID)", in: menu)?.action else {
+            throw RecentCheckFailure(description: "favorite target missing after removing recent targets")
+        }
+        try check(actualMode == mode && destination?.bookmarkToken == favoriteID && policy == .ask,
+                  "favorite destination retains its authorization token and asks on conflicts")
+        try check(find("\(mode.rawValue).choose", in: menu)?.action == .transfer(mode: mode, destination: nil, conflictPolicy: .ask),
+                  "directory picker remains available without recent destinations")
+    }
     // Rename the original object and install a different object at its former path.
     let original = history[0]
     let retained = root.appendingPathComponent("original-retained", isDirectory: true)
