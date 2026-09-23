@@ -19,7 +19,7 @@ ln -sfn /Applications "$STAGING/Applications"
 cp "$ROOT/docs/local-install.md" "$STAGING/安装说明.md"
 cp "$ROOT/scripts/uninstall-local-service.command" "$STAGING/卸载本机连接服务.command"
 ARCH="$(lipo -archs "$APP/Contents/MacOS/RightMouse" | tr ' ' '-')"
-DMG="$ROOT/dist/RightMouse-0.2.0-local-$ARCH.dmg"
+DMG="$ROOT/dist/RightMouse-0.2.1-local-$ARCH.dmg"
 hdiutil create -volname RightMouse -srcfolder "$STAGING" -ov -format UDZO "$DMG"
 (cd "$ROOT/dist" && shasum -a 256 "$(basename "$DMG")" > "$(basename "$DMG").sha256")
 printf '\n本机发行包（未公证）：%s\n' "$DMG"
