@@ -47,8 +47,8 @@ private struct DiagnosticHostFailure: Error, CustomStringConvertible { let descr
     let createdReceipt = try await finished(create.requestID)
     try check(createdReceipt.status == .completed, "normal operation completes with diagnostics enabled")
     let created = try records(exported().data)
-    try check(created.contains { $0.requestID == create.requestID && $0.event == .requestAccepted && $0.action == .createFile }, "accepted event carries only typed action and random request ID")
-    try check(created.contains { $0.requestID == create.requestID && $0.event == .requestFinished && $0.status == .completed }, "terminal receipt creates a finished diagnostic event")
+    try check(!created.contains { $0.requestID != nil || $0.action != nil }, "diagnostics do not record individual operations")
+    try check(!created.contains { $0.requestID == create.requestID }, "completed operations leave no diagnostic history")
     let text = String(decoding: try exported().data, as: UTF8.self)
     try check(!text.contains(root.path) && !text.contains("private-customer") && !text.contains("confidential-invoice") && !text.contains("bookmark"), "export excludes source paths target names and bookmark fields")
 
@@ -63,7 +63,7 @@ private struct DiagnosticHostFailure: Error, CustomStringConvertible { let descr
     try check(failed.status == .failed && failed.itemResults.first?.error?.code == .accessDenied, "real permission failure reaches item receipt as ACCESS_DENIED")
     try check(failed.itemResults.first?.error?.retryable == true, "permission repair remains a retryable failure")
     let failureEvents = try records(exported().data)
-    try check(failureEvents.contains { $0.requestID == transfer.requestID && $0.event == .requestFinished && $0.errorCode == .accessDenied }, "terminal diagnostic records structured error code without error message")
+    try check(!failureEvents.contains { $0.requestID == transfer.requestID }, "failed operations use error prompts rather than diagnostic history")
     try check(!String(decoding: try exported().data, as: UTF8.self).contains("sensitive payload"), "failed operation cannot leak file contents into export")
 
     let missing = CommandRequest(context: .init(entryPoint: .items, container: nil, selection: [.init(url: root.appendingPathComponent("absent.txt"), kindHint: .file)]),

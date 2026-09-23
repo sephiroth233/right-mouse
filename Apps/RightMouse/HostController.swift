@@ -64,7 +64,11 @@ import Darwin
     private let allowsLocalFinderRequests: Bool
     private let confirmLocalFinderRequest: @MainActor (CommandRequest, String) -> Bool
     private var presentingLocalFinderRequest = false
+    // Only explicit recovery requests may open the file review window.
     var showTasks: (() -> Void)?
+    var onTransferStarted: (() -> Void)? // fault-injection seam, never presents UI
+    private var cleanupTimer: Timer?
+    deinit { cleanupTimer?.invalidate() }
 
     init(storagePaths: SharedPaths? = nil, conflictPrompt: @escaping ConflictPrompt = ConflictDialog.present,
          projectDirectoryPicker: @escaping ProjectDirectoryPicker = OpenWithInteraction.chooseProjectDirectory,
@@ -95,7 +99,7 @@ import Darwin
             diagnosticRoot = URL(fileURLWithPath: String(cString: physicalPath), isDirectory: true)
             free(physicalPath)
         } else { diagnosticRoot = paths.privateRoot }
-        diagnostics = DiagnosticLogStore(directory: diagnosticRoot.appendingPathComponent("Diagnostics"))
+        diagnostics = DiagnosticLogStore(directory: diagnosticRoot.appendingPathComponent("Diagnostics"), excludesOperationEvents: true)
         model.isDevelopmentStorage = paths.isDevelopmentFallback
         model.isLocalFinderMode = allowsLocalFinderRequests
         model.storageDiagnostic = allowsLocalFinderRequests ? "本机模式不依赖共享容器。Finder 使用内置菜单；新建、复制、移动与打开方式需在应用中确认。菜单管理支持内置操作的一级显示与收起；自定义模板、应用、常用目录与剪切粘贴请在应用内使用。" : paths.developmentDiagnostic
@@ -132,11 +136,9 @@ import Darwin
         try? FileManager.default.removeItem(at: paths.pendingMoveURL)
         diagnostics.append(component: .host, event: .hostStarted)
         diagnostics.append(component: .configuration, event: .configurationLoaded, errorCode: model.isReadOnly ? .recoveryRequired : nil)
-        if model.isReadOnly { model.retentionSummary = "只读诊断模式未执行过期记录清理，原始记录继续保留。" }
-        else {
-            let retention = OperationRetention(paths: paths, ledger: ledger).prune()
-            model.retentionSummary = "本次启动已清理 \(retention.prunedRequests) 个过期任务，保留 \(retention.retainedRequests) 个任务。" + (retention.issues > 0 ? "有 \(retention.issues) 处记录无法确认安全清理，已保留现场。" : "")
-            if retention.issues > 0 { diagnostics.append(component: .host, event: .recoveryDetected, errorCode: .recoveryRequired) }
+        cleanupFinishedOperations()
+        cleanupTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.cleanupFinishedOperations() }
         }
         do { try publishMenu(model.configuration, available: !model.isReadOnly) }
         catch { model.reportError("Finder 菜单快照不可用：\(error.localizedDescription)") }
@@ -251,7 +253,7 @@ import Darwin
                     model.updateTask(TaskPresentation(id: request.requestID, title: title(request.action), status: "需要核对", detail: receipt.error?.message ?? "", canReview: true))
                 }
                 publishBestEffort(receipt)
-                if receipt.status == .needsReview { showTasks?() }
+                if receipt.status == .needsReview { model.reportError("上次操作结果尚未确认，请到权限与诊断中核对文件。") }
                 return true
             }
             activeIDs.insert(request.requestID)
@@ -281,6 +283,7 @@ import Darwin
                 }
             }
             worker = nil
+            cleanupFinishedOperations()
         }
     }
     func perform(_ text: String, files: [URL], destination: URL?) {
@@ -314,7 +317,7 @@ import Darwin
         var scopes: [URL] = []
         var effectStarted = false
         var stagedMoveToken: UUID?
-        defer { for url in scopes { url.stopAccessingSecurityScopedResource() }; cancellations[id] = nil; activeIDs.remove(id); interactiveIDs.remove(id); followupParents[id] = nil }
+        defer { for url in scopes { url.stopAccessingSecurityScopedResource() }; cancellations[id] = nil; activeIDs.remove(id); interactiveIDs.remove(id); followupParents[id] = nil; cleanupFinishedOperations() }
         do {
             if cancellations[id]?.isCancelled == true { throw CommandFailure(.cancelled, "已取消尚未开始的任务") }
             try update(id, status: .planning)
@@ -440,7 +443,7 @@ import Darwin
             model.updateTask(TaskPresentation(id: id, title: title(request.action), status: "需要核对", detail: "无法保存执行计划，未开始文件操作。", canReview: true))
             model.reportError(error); return
         }
-        showTasks?()
+        onTransferStarted?()
         let result = await engine.transfer(sources: sources, to: destination, mode: mode == .copy ? .copy : .move,
             conflictPolicy: TransferConflictPolicy(rawValue: policy.rawValue) ?? .ask, cancellation: cancellation,
             onProgress: { [weak self] progress in
@@ -460,7 +463,7 @@ import Darwin
                 await self?.resolveConflict(id: id, source: source, target: target) ?? .cancel
             }, operationID: id)
         results[id] = result
-        if result.completedCount > 0 { model.rememberDestination(destination) }
+        // Destinations are not added to a usage history.
         if let parent = followupParents[id], let old = requests[parent], case let .pasteMove(token, _, _) = old.action, pending?.token == token {
             let moved = Set(result.items.filter { $0.status == .completed }.map { $0.source.standardizedFileURL.path })
             pending?.files.removeAll { moved.contains($0.url.standardizedFileURL.path) }
@@ -488,6 +491,10 @@ import Darwin
                 task.canUndo = false; task.canRetry = false; task.canReview = true
             } else if let note { task.detail += "；\(note)" }
             model.updateTask(task)
+            let errors = result.items.filter { [.failed, .needsReview, .sourceRetained].contains($0.status) }
+            if !errors.isEmpty {
+                model.reportError("完成 \(result.completedCount) / \(result.items.count) 项。\n" + errors.prefix(5).map { "\($0.source.lastPathComponent)：\($0.message)" }.joined(separator: "\n"))
+            }
         } catch {
             var task = presentation(result, title: title(request.action)); task.status = "需要核对"; task.canReview = true; task.canRetry = false; task.canUndo = false
             task.detail = "文件引擎已返回结果，但主任务记录失败；请核对后再操作。"
@@ -503,7 +510,6 @@ import Darwin
             var task = model.tasks.first(where: { $0.id == id }) ?? TaskPresentation(id: id, title: "文件操作", status: "等待选择")
             task.status = "等待选择"; task.detail = "目标中已有“\(target.lastPathComponent)”，请选择处理方式。"; task.canCancel = true
             model.updateTask(task)
-            showTasks?()
             let response = await conflictPrompt(source, target, cancellation)
             waitingConflicts.remove(id)
             try update(id, status: .running)
@@ -653,7 +659,7 @@ import Darwin
     }
     private func publishBestEffort(_ receipt: CommandReceipt) {
         do { try publish(receipt) }
-        catch { model.notice = "任务状态已保存在本机，但共享回执暂时写入失败；请在文件任务中查看实际结果。" }
+        catch { model.notice = "任务状态已保存在本机，但共享回执暂时写入失败；请在权限与诊断中核对文件。" }
     }
     private func update(_ id: UUID, status: ReceiptStatus, items: [ItemReceipt] = [], error: CommandFailure? = nil) throws {
         guard var entry = try ledger.entry(id) else { throw CommandFailure(.recoveryRequired, "操作日志缺失") }
@@ -677,6 +683,19 @@ import Darwin
         case .openFavorite: return .openFavorite
         }
     }
+    /// Terminal files are transport/replay state, not history. An expired request
+    /// is rejected by CommandLedger even after its receipt has been removed.
+    func cleanupFinishedOperations(now: Date = Date()) {
+        guard !model.isReadOnly, activeIDs.isEmpty, worker == nil else { return }
+        let report = OperationRetention(paths: paths, ledger: ledger, lifetime: 0).prune(now: now)
+        for id in report.prunedIDs {
+            requests[id] = nil; results[id] = nil; sessionAuthorizedIDs.remove(id)
+        }
+        model.tasks.removeAll { report.prunedIDs.contains($0.id) }
+        model.retentionSummary = report.issues > 0
+            ? "正常操作不保留历史；有无法确认安全的临时状态已保留，请核对文件。"
+            : "正常操作不保留历史；临时通信状态在请求失效后自动清理。"
+    }
     private func restoreHistory() {
         do {
             let scan = try ledger.scanEntries()
@@ -693,15 +712,14 @@ import Darwin
                     diagnostics.append(component: .host, event: .recoveryDetected, requestID: entry.request.requestID, action: diagnosticAction(entry.request.action), status: .needsReview, errorCode: .recoveryRequired)
                 }
                 if entry.request.action.changesFiles && (index < 100 || entry.receipt.status == .needsReview) {
-                    var task = TaskPresentation(id: entry.request.requestID, title: title(entry.request.action), status: entry.receipt.status == .needsReview ? "需要核对" : stateTitle(entry.receipt.status.rawValue), detail: entry.receipt.error?.message ?? "历史任务", total: entry.receipt.itemResults.count, items: entry.receipt.itemResults.map { TaskItemPresentation(name: $0.destinationURL?.lastPathComponent ?? "项目", status: stateTitle($0.status), detail: $0.error?.message ?? "", destination: $0.destinationURL) }, canReview: true)
+                    var task = TaskPresentation(id: entry.request.requestID, title: title(entry.request.action), status: entry.receipt.status == .needsReview ? "需要核对" : stateTitle(entry.receipt.status.rawValue), detail: entry.receipt.error?.message ?? "", total: entry.receipt.itemResults.count, items: entry.receipt.itemResults.map { TaskItemPresentation(name: $0.destinationURL?.lastPathComponent ?? "项目", status: stateTitle($0.status), detail: $0.error?.message ?? "", destination: $0.destinationURL) }, canReview: entry.receipt.status == .needsReview)
                     do {
                         if entry.receipt.status != .needsReview, let followup = try verifiedFollowup(entry.request.requestID), let result = followup.result {
                             results[result.operationID] = result
                             task = decorate(presentation(result, title: title(entry.request.action)), followup: followup)
-                            task.canReview = true
                         }
                     } catch {
-                        task.status = "需要核对"; task.detail = error.localizedDescription
+                        task.status = "需要核对"; task.detail = error.localizedDescription; task.canReview = true
                         model.notice = preserveEvidence([followups.directory.appendingPathComponent(entry.request.requestID.uuidString + ".json")], category: .followups)
                     }
                     model.updateTask(task)

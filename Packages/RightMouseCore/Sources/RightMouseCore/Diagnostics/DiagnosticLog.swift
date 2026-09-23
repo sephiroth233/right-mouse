@@ -62,9 +62,10 @@ public final class DiagnosticLogStore: @unchecked Sendable {
     public static let fileName = "events.jsonl"
     private let limits: DiagnosticLogLimits
     private let clock: () -> Date
+    private let excludesOperationEvents: Bool
     private let mutex = NSLock()
-    public init(directory: URL, limits: DiagnosticLogLimits = .init(), clock: @escaping () -> Date = Date.init) {
-        self.directory = directory; self.limits = limits; self.clock = clock
+    public init(directory: URL, limits: DiagnosticLogLimits = .init(), excludesOperationEvents: Bool = false, clock: @escaping () -> Date = Date.init) {
+        self.directory = directory; self.limits = limits; self.clock = clock; self.excludesOperationEvents = excludesOperationEvents
     }
     @discardableResult public func append(component: DiagnosticComponent, event: DiagnosticEvent,
                                           requestID: UUID? = nil, action: DiagnosticAction? = nil,
@@ -94,6 +95,10 @@ public final class DiagnosticLogStore: @unchecked Sendable {
             if let record = makeRecord(now) {
                 if limits.retentionSeconds > 0 { records.append(record) }
                 else { report.issues.expiredRecords += 1 }
+            }
+            // Also migrate old logs: no per-operation audit trail in the app.
+            if excludesOperationEvents {
+                records.removeAll { $0.requestID != nil || $0.action != nil || [.requestAccepted, .requestFinished, .requestRejected, .retryRequested, .undoRequested, .reviewConfirmed].contains($0.event) }
             }
             // Stable oldest-first ordering also handles a clock adjusted backwards.
             records = records.enumerated().sorted { lhs, rhs in

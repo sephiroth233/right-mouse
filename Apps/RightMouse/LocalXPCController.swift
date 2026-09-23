@@ -128,7 +128,7 @@ final class FinderXPCListenerDelegate: NSObject, NSXPCListenerDelegate {
         stopped = true; timer?.invalidate(); timer = nil
         registration?.invalidate(); registration = nil; connecting = false
         UserDefaults.standard.set(true, forKey: "RightMouseLocalServiceDisabled")
-        do { try LocalServiceInstaller.uninstall(); model?.localServiceReady = false; model?.localServiceStatus = "本机连接服务已停用；设置和任务记录已保留。" }
+        do { try LocalServiceInstaller.uninstall(); model?.localServiceReady = false; model?.localServiceStatus = "本机连接服务已停用；设置已保留。" }
         catch { model?.reportError(error) }
     }
 }

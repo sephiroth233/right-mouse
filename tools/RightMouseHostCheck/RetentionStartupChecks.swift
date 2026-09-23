@@ -36,7 +36,7 @@ private struct RetentionStartupFailure: Error, CustomStringConvertible { let des
     let paths = SharedPaths(root: root, privateRoot: root.appendingPathComponent("Host", isDirectory: true), isDevelopmentFallback: true)
     // Do not prepare or inspect Commands before HostController constructs its URL.
     var host: HostController? = try HostController(storagePaths: paths)
-    check(host!.model.retentionSummary?.contains("有 1 处") == false && host!.model.retentionSummary?.contains("保留 0 个任务") == true,
+    check(host!.model.retentionSummary?.contains("有 1 处") == false && host!.model.retentionSummary?.contains("正常操作不保留历史") == true,
           "real fresh HostController startup reports no uncertain retention records")
     let export = try host!.model.onExportDiagnostics!()
     let events = try String(decoding: export.data, as: UTF8.self).split(separator: "\n").map { line -> String in

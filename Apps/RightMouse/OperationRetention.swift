@@ -9,19 +9,20 @@ struct RetentionReport {
     var removedRecords = 0
     var retainedRequests = 0
     var issues = 0
+    var prunedIDs = Set<UUID>()
 }
 
-/// Run synchronously before accepting work, using the host's already locked ledger.
+/// Run synchronously while the host is idle, using its already locked ledger.
 /// This only unlinks validated private JSON records; payload URLs are never accessed.
 struct OperationRetention {
     enum RemovalPhase { case evidence, retryLinks, commands }
     let paths: SharedPaths
     let ledger: CommandLedger
     private let afterRemoval: ((RemovalPhase) throws -> Void)?
-    init(paths: SharedPaths, ledger: CommandLedger, afterRemoval: ((RemovalPhase) throws -> Void)? = nil) {
-        self.paths = paths; self.ledger = ledger; self.afterRemoval = afterRemoval
+    init(paths: SharedPaths, ledger: CommandLedger, lifetime: TimeInterval = 30 * 24 * 60 * 60, afterRemoval: ((RemovalPhase) throws -> Void)? = nil) {
+        self.paths = paths; self.ledger = ledger; self.lifetime = lifetime; self.afterRemoval = afterRemoval
     }
-    private let lifetime: TimeInterval = 30 * 24 * 60 * 60
+    private let lifetime: TimeInterval
 
     func prune(now: Date = Date()) -> RetentionReport {
         var report = RetentionReport()
@@ -89,7 +90,7 @@ struct OperationRetention {
             for (id, pair) in entries {
                 let (entry, commandFile) = pair
                 guard terminal.contains(entry.receipt.status), !invalidJournalOperations.contains(id), entry.receipt.updatedAt < cutoff,
-                      entry.request.createdAt < cutoff,
+                      entry.request.createdAt < cutoff, entry.request.expiresAt <= now,
                       ![CommandErrorCode.recoveryRequired, .sourceRetained].contains(entry.receipt.error?.code ?? .invalidRequest),
                       !entry.receipt.itemResults.contains(where: { [.recoveryRequired, .sourceRetained].contains($0.error?.code ?? .invalidRequest) }),
                       !entry.receipt.itemResults.contains(where: { ["sourceRetained", "needsReview"].contains($0.status) }) else { continue }
@@ -186,6 +187,7 @@ struct OperationRetention {
                         try afterRemoval?(phase)
                     }
                     report.prunedRequests += component.count
+                    report.prunedIDs.formUnion(component)
                 } catch { report.issues += 1 }
             }
         } catch { report.issues += 1 }

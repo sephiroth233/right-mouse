@@ -61,6 +61,7 @@ enum SetupExercisePhase: Equatable {
 @MainActor final class AppModel: ObservableObject {
     @Published var configuration: AppConfiguration
     @Published var tasks: [TaskPresentation] = []
+    var recoveryTasks: [TaskPresentation] { tasks.filter { $0.canReview } }
     @Published var errorMessage: String?
     @Published var notice: String?
     @Published var isDevelopmentStorage = false
@@ -417,7 +418,7 @@ enum SetupExercisePhase: Equatable {
     func refreshDiagnostics() { extensionEnabled = FIFinderSyncController.isExtensionEnabled }
     func showExtensionSettings() { FIFinderSyncController.showExtensionManagementInterface() }
     func copyDiagnostics() {
-        let summary = "RightMouse 开发版\n系统：\(ProcessInfo.processInfo.operatingSystemVersionString)\n存储模式：\(isLocalFinderMode ? (authenticatedXPCBuild ? "本机 XPC：" + localServiceStatus : "本机 Finder 模式，操作需确认") : isDevelopmentStorage ? "独立开发目录；Finder 右键功能不可用" : "共享容器")\nFinder 扩展登记：\(extensionEnabled ? "已启用" : "未启用")\n配置版本：\(configuration.schemaVersion) / \(configuration.revision)\n监控目录：\(configuration.watchedLocations.count)\n任务数量：\(tasks.count)\n只读配置：\(isReadOnly ? "是" : "否")\n此摘要不包含用户文件路径、内容或书签。"
+        let summary = "RightMouse 开发版\n系统：\(ProcessInfo.processInfo.operatingSystemVersionString)\n存储模式：\(isLocalFinderMode ? (authenticatedXPCBuild ? "本机 XPC：" + localServiceStatus : "本机 Finder 模式，操作需确认") : isDevelopmentStorage ? "独立开发目录；Finder 右键功能不可用" : "共享容器")\nFinder 扩展登记：\(extensionEnabled ? "已启用" : "未启用")\n配置版本：\(configuration.schemaVersion) / \(configuration.revision)\n监控目录：\(configuration.watchedLocations.count)\n只读配置：\(isReadOnly ? "是" : "否")\n此摘要不包含用户文件路径、内容或书签。"
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(summary, forType: .string)
         notice = "诊断摘要已复制。"
     }
@@ -428,7 +429,7 @@ enum SetupExercisePhase: Equatable {
             guard export.report.issues.ioFailures == 0 else { throw CommandFailure(.ioFailed, "无法安全读取诊断记录，请检查应用存储空间和权限后重试。") }
             let panel = NSSavePanel()
             panel.title = "导出脱敏诊断记录"
-            panel.message = "仅导出事件时间、组件、随机任务标识、操作类型、状态和错误码。"
+            panel.message = "仅导出组件状态、事件时间和错误码，不包含逐项操作历史。"
             panel.nameFieldStringValue = "RightMouse-diagnostics.jsonl"
             panel.allowedContentTypes = [UTType(filenameExtension: "jsonl") ?? .plainText]
             panel.canCreateDirectories = true

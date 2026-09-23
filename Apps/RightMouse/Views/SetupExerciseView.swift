@@ -3,7 +3,6 @@ import SwiftUI
 /// A user-triggered exercise through the same host creator as Finder commands.
 struct SetupExerciseView: View {
     @ObservedObject var model: AppModel
-    var showTasks: () -> Void
     private var waiting: Bool { model.setupExercisePhase == .waiting }
     private var successful: Bool { model.setupExercisePhase == .succeeded }
     var body: some View {
@@ -40,7 +39,6 @@ struct SetupExerciseView: View {
                     if let target = model.setupExerciseTarget { model.beginSetupExercise(at: target) }
                 }.buttonStyle(.borderedProminent)
                     .disabled(model.isReadOnly || waiting || successful || model.setupExercisePhase == .needsReview || model.setupExerciseTarget == nil)
-                if model.setupExerciseRequestID != nil { Button("查看任务") { showTasks() } }
             }
             Text("会新建“RightMouse 演练.txt”；重名自动增加序号，不覆盖现有文件。取消目录选择不会创建文件。")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

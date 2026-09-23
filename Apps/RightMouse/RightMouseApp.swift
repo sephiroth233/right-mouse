@@ -28,6 +28,7 @@ enum RightMouseApplication {
     private var receivedDispatch = false
     private var startupURLs: [URL] = []
     private var localLayoutSubscription: AnyCancellable?
+    private var errorSubscription: AnyCancellable?
     private let logger = Logger(subsystem: "cn.rightmouse.RightMouse", category: "URLDispatch")
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleURL(_:reply:)),
@@ -48,6 +49,15 @@ enum RightMouseApplication {
                     Self.publishLocalLayout(configuration)
                 }
             }
+            errorSubscription = controller?.model.$errorMessage.compactMap { $0 }.sink { [weak self] message in
+                DispatchQueue.main.async { [weak self] in
+                    guard let model = self?.controller?.model, model.errorMessage == message else { return }
+                    model.errorMessage = nil
+                    let alert = NSAlert(); alert.messageText = "操作未完成"; alert.informativeText = message
+                    alert.addButton(withTitle: "好")
+                    NSApp.activate(ignoringOtherApps: true); alert.runModal()
+                }
+            }
             controller?.showTasks = { [weak self] in self?.showTasks() }
             controller?.scanInbox()
             if let controller, let identity = LocalXPCIdentity() {
@@ -58,7 +68,6 @@ enum RightMouseApplication {
             item.button?.image = NSImage(systemSymbolName: "cursorarrow.click.2", accessibilityDescription: "RightMouse")
             let menu = NSMenu()
             menu.addItem(withTitle: "RightMouse 设置…", action: #selector(showSettings), keyEquivalent: ",").target = self
-            menu.addItem(withTitle: "文件任务", action: #selector(showTasks), keyEquivalent: "").target = self
             menu.addItem(.separator()); menu.addItem(withTitle: "退出 RightMouse", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
             item.menu = menu; statusItem = item
             let waiting = startupURLs; startupURLs.removeAll()
@@ -99,7 +108,7 @@ enum RightMouseApplication {
         if settingsWindow == nil {
             let window = NSWindow(contentRect: NSRect(origin: .zero, size: WindowLayout.settingsSize), styleMask: [.titled,.closable,.miniaturizable,.resizable], backing: .buffered, defer: false)
             window.title = "RightMouse"; window.isReleasedWhenClosed = false
-            let hosting = NSHostingController(rootView: RootView(model: controller.model, showTasks: { [weak self] in self?.showTasks() }))
+            let hosting = NSHostingController(rootView: RootView(model: controller.model))
             // WindowLayout owns window bounds. Page-specific intrinsic sizes must
             // not change contentMinSize/contentMaxSize when the sidebar changes.
             hosting.sizingOptions = []
@@ -114,7 +123,7 @@ enum RightMouseApplication {
         guard let controller else { return }
         if tasksWindow == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 560), styleMask: [.titled,.closable,.miniaturizable,.resizable], backing: .buffered, defer: false)
-            window.title = "RightMouse 文件任务"; window.isReleasedWhenClosed = false
+            window.title = "RightMouse 文件核对"; window.isReleasedWhenClosed = false
             let hosting = NSHostingController(rootView: TasksView(model: controller.model).padding(.top, 20).background(RightMouseBackdrop()).groupBoxStyle(RightMouseGroupBoxStyle()))
             hosting.sizingOptions = []
             window.contentViewController = hosting

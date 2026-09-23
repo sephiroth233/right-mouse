@@ -172,7 +172,7 @@ private struct ConflictCheckFailure: Error, CustomStringConvertible { let descri
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: commands.path) }
         var prompts = 0, setupError: Error?, blocked = false
         let host = try HostController(storagePaths: paths, conflictPrompt: { _, _, _ in prompts += 1; return .init(decision: .keepBoth) })
-        host.showTasks = {
+        host.onTransferStarted = {
             guard !blocked else { return }; blocked = true
             do { try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: commands.path) } catch { setupError = error }
         }

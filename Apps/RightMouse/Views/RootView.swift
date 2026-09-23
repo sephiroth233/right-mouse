@@ -27,7 +27,6 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
 
 struct RootView: View {
     @ObservedObject var model: AppModel
-    var showTasks: () -> Void
     @ViewState private var page: SettingsPage? = .general
     var body: some View {
         GeometryReader { viewport in
@@ -86,7 +85,7 @@ struct RootView: View {
                 if model.isReadOnly { Text("配置版本不兼容，当前为只读。原始文件已保留。请使用支持此配置的应用版本。").foregroundStyle(.orange).padding(.horizontal, 28) }
                 Group {
                     switch current {
-                    case .general: GeneralSettingsView(model: model, navigate: { page = $0 }, showTasks: showTasks)
+                    case .general: GeneralSettingsView(model: model, navigate: { page = $0 })
                     case .menus: MenuSettingsView(model: model)
                     case .templates: TemplateSettingsView(model: model)
                     case .applications: ApplicationSettingsView(model: model)
@@ -105,20 +104,18 @@ struct RootView: View {
         .background(RightMouseBackdrop())
         .groupBoxStyle(RightMouseGroupBoxStyle())
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in model.refreshDiagnostics() }
-        .alert("操作未完成", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("好", role: .cancel) { model.errorMessage = nil } } message: { Text(model.errorMessage ?? "") }
     }
 }
 
 private struct GeneralSettingsView: View {
     @ObservedObject var model: AppModel
     var navigate: (SettingsPage) -> Void
-    var showTasks: () -> Void
     var body: some View {
         Form {
             Section("开始使用") {
                 SetupStep(number: 1, title: "启用 Finder 扩展", subtitle: model.isLocalFinderMode ? (model.extensionEnabled ? "扩展已启用。请在普通本地目录右键使用已配置的菜单。" : "在系统设置中启用 RightMouse Finder 扩展。") : model.isDevelopmentStorage ? (model.extensionEnabled ? "扩展已登记，但共享通信不可用。" : "开发模式下共享通信不可用，Finder 菜单暂不可用。") : (model.extensionEnabled ? "扩展已启用，可继续选择覆盖目录。" : "在系统设置中启用 RightMouse Finder 扩展。"), complete: (!model.isDevelopmentStorage || model.isLocalFinderMode) && model.extensionEnabled) { model.showExtensionSettings() }
                 SetupStep(number: 2, title: "选择使用目录", subtitle: model.isLocalFinderMode ? "本机菜单覆盖普通本地目录；此处目录配置用于共享模式。" : "已配置 \(model.configuration.watchedLocations.count) 个目录；子文件夹一并覆盖。", complete: !model.configuration.watchedLocations.isEmpty) { navigate(.diagnostics) }
-                SetupExerciseView(model: model, showTasks: showTasks)
+                SetupExerciseView(model: model)
                 SetupStep(number: 4, title: "定制右键菜单", subtitle: model.isLocalFinderMode ? "选择常用操作放到 Finder 一级菜单，其余操作可收进子菜单。" : "新建文件、复制路径、剪切移动与打开方式。", complete: false) { navigate(.menus) }
             }
             if model.authenticatedXPCBuild {
@@ -178,8 +175,18 @@ private struct DiagnosticsSettingsView: View {
                                 Button("启用或修复连接") { model.onRepairLocalService?() }
                                 Button("停用并移除服务") { model.onStopLocalService?() }
                             }
-                            Text("停用后 Finder 文件操作将不可用；设置和任务记录会保留。删除应用前可先在这里移除服务。").font(.caption).foregroundStyle(.secondary)
+                            Text("停用后 Finder 文件操作将不可用；设置会保留。删除应用前可先在这里移除服务。").font(.caption).foregroundStyle(.secondary)
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                    }
+                }
+                if !model.recoveryTasks.isEmpty {
+                    GroupBox("需要核对的文件") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("这些操作的文件状态尚未确认。请核对文件后再继续操作。").font(.caption)
+                            ForEach(model.recoveryTasks) { task in
+                                HStack { Text(task.title); Spacer(); Button("核对文件…") { model.onReviewTask?(task.id) } }
+                            }
+                        }.padding(8)
                     }
                 }
                 Text("右键菜单覆盖目录").font(.headline)
@@ -193,7 +200,7 @@ private struct DiagnosticsSettingsView: View {
                             Button("复制诊断摘要") { model.copyDiagnostics() }
                             Button("导出脱敏诊断") { model.exportDiagnostics() }
                         }
-                        Text("诊断事件最多保留 7 天或 10 MiB，先达到的限制生效。导出文件仅含事件时间、组件、随机任务标识、操作类型、状态和错误码，不含文件名、路径、内容或安全书签。证据完整的终态任务在超过 30 天后清理；未完成、撤销、暂存或需要核对的记录继续保留。").font(.caption).foregroundStyle(.secondary)
+                        Text("不保存操作历史。组件诊断最多保留 7 天或 10 MiB，不逐项记录文件操作。临时通信状态在请求失效后自动清理；异常中断或无法确认安全的文件现场保留，供手动核对。").font(.caption).foregroundStyle(.secondary)
                         if let summary = model.retentionSummary { Text(summary).font(.caption).foregroundStyle(.secondary) }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
                 }

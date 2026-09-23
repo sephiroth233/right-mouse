@@ -7,19 +7,18 @@ struct TasksView: View {
     @ViewState private var expanded: Set<UUID> = []
     var body: some View {
         Group {
-            if model.tasks.isEmpty {
-                ContentUnavailableView("还没有任务", systemImage: "checklist", description: Text("从 Finder 右键菜单发起操作，结果会显示在这里。"))
+            if model.recoveryTasks.isEmpty {
+                ContentUnavailableView("无需核对", systemImage: "checkmark.shield", description: Text("正常完成的操作不会保留在这里。"))
             } else {
                 ScrollView {
                     LazyVStack(spacing: 14) {
-                        ForEach(model.tasks) { task in
+                        ForEach(model.recoveryTasks) { task in
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack(alignment: .top) {
                                     Image(systemName: statusIcon(task.status)).font(.title2).foregroundStyle(statusColor(task.status)).frame(width: 28)
                                     VStack(alignment: .leading, spacing: 4) { Text(task.title).font(.headline); Text(taskStatus(task.status)).font(.caption).foregroundStyle(statusColor(task.status)) }
                                     Spacer()
                                     if task.canCancel { Button("取消") { model.onCancelTask?(task.id) }.disabled(model.onCancelTask == nil) }
-                                    if task.canUndo { Button("撤销移动") { model.onUndoTask?(task.id) }.disabled(model.onUndoTask == nil) }
                                     if task.canRetry { Button("重试失败项") { model.onRetryTask?(task.id) }.disabled(model.onRetryTask == nil) }
                                     if task.canReview { Button("核对任务") { model.onReviewTask?(task.id) }.disabled(model.onReviewTask == nil) }
                                 }
@@ -41,7 +40,6 @@ struct TasksView: View {
                                         }.padding(.leading, 8)
                                     }
                                 }
-                                Text("任务 \(task.id.uuidString)").font(.system(.caption2, design: .monospaced)).foregroundStyle(.tertiary).textSelection(.enabled)
                             }.padding(18).background(.background, in: RoundedRectangle(cornerRadius: 12)).overlay(RoundedRectangle(cornerRadius: 12).stroke(.quaternary))
                         }
                     }.padding(.horizontal, 28).padding(.bottom, 24).padding(.top, 4)
