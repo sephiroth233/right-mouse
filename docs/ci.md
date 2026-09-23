@@ -1,0 +1,35 @@
+# GitHub 自动构建
+
+## 目标与范围
+
+GitHub Actions 复用本机预览版脚本，检查代码并分别生成 Apple Silicon（arm64）和 Intel（x86_64）DMG。使用临时构建签名，不需要 Apple Developer 账号、证书 Secrets 或 App Group。产物不经过 Apple 公证。
+
+触发条件为推送到 `main`、以 `main` 为目标的 Pull Request，以及 Actions 页面手动运行。产物仅保存到对应运行的 Artifacts，不自动创建 Release、推送提交或标签。手动运行入口需要工作流已存在于默认分支。
+
+## 流程与验收条件
+
+1. 在 Ubuntu 上使用 Python 3.12 运行 SDD 文档、JSON Schema 和追踪关系校验。
+2. 文档检查通过后，分别在 `macos-26`（arm64）与 `macos-26-intel`（x86_64）执行核心和宿主检查。任一检查失败，该架构不产出可下载安装包。
+3. 使用镜像默认 Xcode；记录工具链，要求 macOS SDK 26 或更新，以编译液态玻璃 API。最低部署目标仍为 macOS 14。
+4. 运行 `build-local-app.py` 编译、临时签名，再运行 `package-local-app.sh --no-build` 打包。
+5. 校验宿主、Finder 扩展和连接服务的架构、嵌套签名、DMG 镜像及 SHA-256；保存提交、版本、SDK 和构建身份元数据。
+6. 上传 DMG、SHA-256、构建信息，保留 14 天；构建日志即使失败也上传，保留 7 天。同一分支或 PR 的新运行取消尚未完成的旧运行。
+
+工作流仅授予 `contents: read`；第三方 Actions 固定到完整提交 SHA，checkout 不持久化仓库凭据。PR 使用普通 `pull_request` 事件。只上传明确列出的发行文件和日志，不上传整个构建目录、临时钥匙串或私钥。
+
+## 下载与使用
+
+工作流推送到 GitHub 并运行成功后，在仓库 **Actions → Build macOS DMG → 对应运行 → Artifacts** 下载匹配架构的产物。解压 Actions 产物后，按[安装说明](local-install.md)安装其中的 DMG。
+
+每个架构单独生成完整配套的宿主、扩展和服务；升级时替换整个应用，不混用不同运行中的组件。Actions 产物有保留期限，稳定公开下载仍需后续发布 Release。
+
+## 验证边界
+
+本地可以检查 YAML、表达式、脚本与文档，并验证已有构建脚本。GitHub 托管 runner 的首次完整运行，需要工作流推送后验证。CI 不注册 Finder 扩展、不启动用户级连接服务，不把自动检查通过等同于真实 Finder、首次安装或最低系统版本验收。
+
+## 参考
+
+- [GitHub 托管 runner 与架构](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
+- [macOS 26 ARM 镜像工具链](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md)
+- [macOS 26 Intel 镜像工具链](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md)
+- [Artifact 上传与保留设置](https://github.com/actions/upload-artifact)
