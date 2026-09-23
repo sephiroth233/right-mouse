@@ -229,6 +229,9 @@ printf '%s\n' 'Building Finder extension…'
 xcrun swiftc "${COMMON[@]}" -parse-as-library -application-extension -I "$BUILD/modules" -L "$BUILD" -lRightMouseCore -module-name RightMouseFinder "${EXT_SOURCES[@]}" -framework FinderSync -framework AppKit -Xlinker -e -Xlinker _NSExtensionMain -o "$EXT/Contents/MacOS/RightMouseFinder"
 python3 "$VALIDATOR" embed "$ROOT" "$BUILD" "$APP"
 if [[ -d "$ROOT/Resources/Templates" ]]; then ditto "$ROOT/Resources/Templates" "$APP/Contents/Resources/Templates"; fi
+mkdir -p "$EXT/Contents/Resources"
+cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+cp "$ROOT/Resources/AppIcon.icns" "$EXT/Contents/Resources/AppIcon.icns"
 SIGN_OPTIONS=(--force --sign "$IDENTITY")
 if [[ "$IDENTITY" != "-" ]]; then SIGN_OPTIONS+=(--options runtime --timestamp); fi
 codesign "${SIGN_OPTIONS[@]}" --entitlements "$BUILD/FinderExtension.entitlements" "$EXT"

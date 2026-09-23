@@ -13,6 +13,7 @@
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSPrincipalClass</key><string>NSApplication</string>
 <key>NSHighResolutionCapable</key><true/>
+<key>CFBundleIconFile</key><string>AppIcon</string>
 <key>NSAppleEventsUsageDescription</key><string>RightMouse 需要在你选择的目录中打开终端。</string>
 <key>RightMouseAppGroup</key><string>$(RIGHTMOUSE_APP_GROUP)</string>
 <key>CFBundleURLTypes</key><array><dict>
