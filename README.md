@@ -16,7 +16,7 @@
 
 ## 安装
 
-当前提供 **0.2.1 本机预览版**，包含 Apple Silicon（arm64）和 Intel（x86_64）安装包。最低编译目标为 macOS 14；两个架构已通过 macOS 26 自动构建与检查，真实 Finder 交互在 macOS 27 上完成本机验证。
+当前提供 **0.2.2 本机预览版**，包含 Apple Silicon（arm64）和 Intel（x86_64）安装包。最低编译目标为 macOS 14；两个架构已通过 macOS 26 自动构建与检查，真实 Finder 交互在 macOS 27 上完成本机验证。
 
 1. 从 [发行版页面](https://github.com/sephiroth233/right-mouse/releases) 下载适合你的 Mac 的 DMG（M 系列选 `arm64`，Intel 选 `x86_64`），打开后将 **RightMouse.app** 拖入 **Applications（应用程序）**。
 2. 打开 RightMouse。当前版本未经过 Apple 公证；若系统阻止启动，可在「系统设置 → 隐私与安全性」中选择「仍要打开」。
@@ -27,7 +27,7 @@
 
 **兼容范围**：当前右键菜单以普通本地目录为主。0.2.1 在本机 macOS 27 的 iCloud 云盘中未显示增强菜单，显式监控云盘目录的独立扩展也未生效；暂不承诺 iCloud 或其他云盘支持。详见 [iCloud 排查记录](docs/icloud-menu-investigation.md)。
 
-源码已加入尚未发布的 **系统服务兼容入口**：在 Finder 右键「服务」中使用新建 TXT/Markdown、复制完整路径、终端和 VS Code。iCloud 菜单显示和目录路径复制已在本机验证；云盘写入、占位文件下载与同步仍待验收。0.2.1 已发布安装包不包含此功能，详见 [服务使用说明](docs/local-install.md#系统服务兼容入口未发布)。
+0.2.2 新增 **系统服务兼容入口**：在 Finder 右键「服务」中使用新建 TXT/Markdown、复制完整路径、终端和 VS Code。iCloud 菜单显示和目录路径复制已在本机验证；云盘写入、占位文件下载与同步仍待验收。此入口独立于 Finder 扩展，详见 [服务使用说明](docs/local-install.md#系统服务兼容入口)。
 
 无法打开、右键菜单未出现，以及升级和卸载步骤，见 [安装与使用说明](docs/local-install.md)。
 

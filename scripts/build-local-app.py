@@ -65,7 +65,7 @@ with tempfile.TemporaryDirectory(prefix='local-signing-', dir=BUILD) as temporar
         for bundle in [bridge, ext, app]:
             path = bundle/'Contents/Info.plist'; info = plistlib.loads(path.read_bytes())
             info['RightMouseAuthenticatedXPC'] = True; info['RightMouseLocalCertificate'] = fingerprint
-            info['CFBundleShortVersionString'] = '0.2.1'
+            info['CFBundleShortVersionString'] = '0.2.2'
             path.write_bytes(plistlib.dumps(info))
         entitlement = plistlib.loads((BUILD/'FinderExtension.entitlements').read_bytes())
         entitlement['com.apple.security.temporary-exception.mach-lookup.global-name'] = ['cn.rightmouse.bridge.'+fingerprint[:16]+'.finder']
