@@ -25,6 +25,8 @@
 
 使用本机版不需要 Apple Developer 账号。首次安装会自动配置当前用户的本机连接服务。
 
+**兼容范围**：当前右键菜单以普通本地目录为主。0.2.1 在本机 macOS 27 的 iCloud 云盘中未显示增强菜单，显式监控云盘目录的独立扩展也未生效；暂不承诺 iCloud 或其他云盘支持。详见 [iCloud 排查记录](docs/icloud-menu-investigation.md)。
+
 无法打开、右键菜单未出现，以及升级和卸载步骤，见 [安装与使用说明](docs/local-install.md)。
 
 ## 从源码构建
