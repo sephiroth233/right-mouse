@@ -25,6 +25,7 @@ public struct MenuConfigurationSnapshot: Codable, Equatable, Sendable {
     public let compactMenu: Bool
     // Optional on the wire so snapshots from older schema-1 builds still load.
     public let topLevelEntryIDs: [String]?
+    public let hiddenEntryIDs: [String]?
     public let conflictPolicy: String
     public let actions: [ConfiguredAction]
     public let favorites: [MenuLocation]
@@ -37,6 +38,7 @@ public struct MenuConfigurationSnapshot: Codable, Equatable, Sendable {
         schemaVersion = 1; revision = configuration.revision; self.available = available
         compactMenu = configuration.compactMenu; conflictPolicy = configuration.conflictPolicy
         topLevelEntryIDs = configuration.topLevelEntryIDs
+        hiddenEntryIDs = configuration.hiddenEntryIDs
         actions = available ? configuration.actions : []
         favorites = available ? configuration.favorites.map { .init(id: $0.id, name: $0.name, path: $0.path, order: $0.order) } : []
         watchedLocations = available ? configuration.watchedLocations.map { .init(id: $0.id, name: $0.name, path: $0.path, order: $0.order) } : []
@@ -49,6 +51,8 @@ public struct MenuConfigurationSnapshot: Codable, Equatable, Sendable {
         let promoted = topLevelEntryIDs ?? []
         guard promoted.count <= 100, Set(promoted).count == promoted.count,
               promoted.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 160 }) else { throw ConfigurationError.invalid("一级菜单快照无效。") }
+        let hidden = hiddenEntryIDs ?? []
+        guard hidden.count <= 400, Set(hidden).count == hidden.count, hidden.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 160 }) else { throw ConfigurationError.invalid("隐藏菜单快照无效。") }
         let commands: Set<String> = ["createFile", "copyText", "stageMove", "pasteMove", "copyTo", "moveTo", "openFavorite", "openWith"]
         guard revision >= 0, [actions.count, favorites.count, watchedLocations.count, integrations.count, templates.count].allSatisfy({ $0 <= 100 }),
               recentDestinations.count <= 10, ["ask", "skip", "keepBoth"].contains(conflictPolicy),

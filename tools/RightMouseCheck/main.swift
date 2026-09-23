@@ -6,6 +6,7 @@ do {
     total += try runLocalFinderRequestChecks()
     total += try await runFileEngineChecks()
     total += try runMenuChecks()
+    total += try runMenuCustomizationChecks()
     total += try runSettingsChecks()
     total += try runReviewChecks()
     total += try await runTransferRecoveryChecks()

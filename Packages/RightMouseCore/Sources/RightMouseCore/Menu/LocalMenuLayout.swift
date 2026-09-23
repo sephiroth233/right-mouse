@@ -11,9 +11,11 @@ public struct LocalMenuLayout: Codable, Equatable, Sendable {
     public var version = 1
     public var compactMenu: Bool
     public var topLevelEntryIDs: [String]
+    public var hiddenEntryIDs: [String]?
 
     public init(configuration: AppConfiguration) {
         compactMenu = configuration.compactMenu
+        hiddenEntryIDs = configuration.hiddenEntryIDs.filter { Self.allowedIDs.contains($0) }
         topLevelEntryIDs = configuration.topLevelEntryIDs.filter { Self.allowedIDs.contains($0) }
     }
     public static var baseConfiguration: AppConfiguration {
@@ -34,6 +36,7 @@ public struct LocalMenuLayout: Codable, Equatable, Sendable {
         var value = Self.baseConfiguration
         value.compactMenu = compactMenu
         value.topLevelEntryIDs = topLevelEntryIDs
+        value.hiddenEntryIDs = hiddenEntryIDs ?? []
         return value
     }
     public func encoded() throws -> String {
@@ -48,7 +51,8 @@ public struct LocalMenuLayout: Codable, Equatable, Sendable {
         guard string.utf8.count <= maximumBytes else { throw ConfigurationError.invalid("菜单层级通知过大。") }
         let data = Data(string.utf8)
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              Set(object.keys) == Set(["version", "compactMenu", "topLevelEntryIDs"]) else {
+              Set(["version", "compactMenu", "topLevelEntryIDs"]).isSubset(of: Set(object.keys)),
+              Set(object.keys).isSubset(of: Set(["version", "compactMenu", "topLevelEntryIDs", "hiddenEntryIDs"])) else {
             throw ConfigurationError.invalid("菜单层级通知字段无效。")
         }
         let value = try JSONDecoder().decode(Self.self, from: data)
@@ -56,7 +60,7 @@ public struct LocalMenuLayout: Codable, Equatable, Sendable {
         return value
     }
     private func validate() throws {
-        guard version == 1, topLevelEntryIDs.count <= 100,
+        guard (hiddenEntryIDs ?? []).count <= 100, Set(hiddenEntryIDs ?? []).count == (hiddenEntryIDs ?? []).count, (hiddenEntryIDs ?? []).allSatisfy({ Self.allowedIDs.contains($0) }), version == 1, topLevelEntryIDs.count <= 100,
               Set(topLevelEntryIDs).count == topLevelEntryIDs.count,
               topLevelEntryIDs.allSatisfy({ Self.allowedIDs.contains($0) }) else {
             throw ConfigurationError.invalid("菜单层级通知无效。")

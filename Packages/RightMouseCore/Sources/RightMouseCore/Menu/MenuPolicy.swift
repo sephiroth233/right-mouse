@@ -63,6 +63,15 @@ public enum MenuPolicy {
                 else { result.append(MenuEntry(id: "group.\(group)", title: group, children: [entry])) }
             } else { result.append(entry) }
         }
+        let hidden = Set(configuration.hiddenEntryIDs ?? [])
+        func visible(_ entries: [MenuEntry]) -> [MenuEntry] {
+            entries.compactMap { original in
+                guard !hidden.contains(original.id) else { return nil }
+                var entry = original; entry.children = visible(entry.children)
+                return entry.action != nil || !entry.children.isEmpty ? entry : nil
+            }
+        }
+        result = visible(result)
         let selected = Set(configuration.topLevelEntryIDs ?? [])
         var promoted: [MenuEntry] = []
         func extract(_ entries: [MenuEntry]) -> [MenuEntry] {

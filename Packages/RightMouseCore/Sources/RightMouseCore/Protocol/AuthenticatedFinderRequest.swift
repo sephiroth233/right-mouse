@@ -31,6 +31,8 @@ public enum AuthenticatedFinderRequest {
         guard configuration.actions.contains(where: { $0.commandType == command && $0.enabled }),
               request.context.selection.allSatisfy({ $0.bookmarkToken == nil }),
               request.context.container?.bookmarkToken == nil else { throw reject() }
+        if let entryID = MenuCustomization.entryID(for: request.action, configuration: configuration),
+           MenuCustomization.placement(entryID, in: configuration) == .hidden { throw reject() }
         func contextTarget(_ target: FileReference?) throws {
             guard let target else { return }
             guard target.bookmarkToken == nil, let container = request.context.container,
