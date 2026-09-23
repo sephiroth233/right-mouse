@@ -53,5 +53,5 @@ func runMenuChecks() throws -> Int {
     let mixedMenu = flatten(MenuPolicy.entries(configuration: configuration, context: mixed, pendingMove: pending, now: now))
     try check(mixedMenu.first { $0.id == "template.md" }?.action == .createFile(templateID: "md", destination: nil, name: nil), "Mixed parent folders require an explicit target for creation")
     try check(mixedMenu.first { $0.id == "pasteMove" }?.action == .pasteMove(pendingToken: token, destination: nil, conflictPolicy: .ask), "Mixed parent folders require an explicit paste target")
-    return 6
+    return 6 + (try runMenuPromotionChecks())
 }

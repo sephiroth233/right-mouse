@@ -78,9 +78,42 @@ public enum MenuPolicy {
                 else { result.append(MenuEntry(id: "group.\(group)", title: group, children: [entry])) }
             } else { result.append(entry) }
         }
-        if !validCount { result = result.map(disabled) }
-        if configuration.compactMenu { return [MenuEntry(id: "rightmouse", title: "RightMouse", children: result)] }
-        return result
+        let selected = Set(configuration.topLevelEntryIDs ?? [])
+        var promoted: [MenuEntry] = []
+        func extract(_ entries: [MenuEntry]) -> [MenuEntry] {
+            entries.compactMap { original in
+                var entry = original
+                entry.children = extract(entry.children)
+                guard entry.action != nil || !entry.children.isEmpty else { return nil }
+                if selected.contains(entry.id) {
+                    entry.title = topLevelTitle(entry)
+                    promoted.append(entry)
+                    return nil
+                }
+                return entry
+            }
+        }
+        result = extract(result)
+        // Explicit selection order remains stable even when both a parent and
+        // one of its descendants are promoted. Each command appears once.
+        let order = configuration.topLevelEntryIDs ?? []
+        promoted.sort { (order.firstIndex(of: $0.id) ?? 0) < (order.firstIndex(of: $1.id) ?? 0) }
+        if configuration.compactMenu, !result.isEmpty {
+            result = [MenuEntry(id: "rightmouse", title: "RightMouse", children: result)]
+        }
+        result = promoted + result
+        return validCount ? result : result.map(disabled)
+    }
+
+    public static func topLevelTitle(_ entry: MenuEntry) -> String {
+        switch entry.action {
+        case .createFile: return "新建 \(entry.title)"
+        case .copyText: return "复制\(entry.title)"
+        case let .openWith(id, _): return id == "terminal" ? "在终端中打开" : "使用 \(entry.title) 打开"
+        case let .transfer(mode, _, _): return "\(mode == .copy ? "复制到" : "移动到")\(entry.title)"
+        case .openFavorite: return "打开\(entry.title)"
+        default: return entry.title
+        }
     }
 
     private static func disabled(_ entry: MenuEntry) -> MenuEntry {

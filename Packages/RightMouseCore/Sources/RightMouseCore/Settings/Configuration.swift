@@ -48,6 +48,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
     public var schemaVersion: Int = 1
     public var revision: Int = 0
     public var compactMenu = false
+    public var topLevelEntryIDs: [String] = []
     public var launchAtLogin = false
     public var revealCreatedFile = true
     public var conflictPolicy = "ask"
@@ -75,7 +76,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         templates = FileTemplate.builtIns
     }
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, revision, compactMenu, launchAtLogin, revealCreatedFile, conflictPolicy
+        case schemaVersion, revision, compactMenu, topLevelEntryIDs, launchAtLogin, revealCreatedFile, conflictPolicy
         case actions, favorites, watchedLocations, recentDestinations, integrations, templates
     }
     public init(from decoder: Decoder) throws {
@@ -83,6 +84,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         schemaVersion = try values.decode(Int.self, forKey: .schemaVersion)
         revision = try values.decode(Int.self, forKey: .revision)
         compactMenu = try values.decode(Bool.self, forKey: .compactMenu)
+        topLevelEntryIDs = try values.decodeIfPresent([String].self, forKey: .topLevelEntryIDs) ?? []
         launchAtLogin = try values.decode(Bool.self, forKey: .launchAtLogin)
         revealCreatedFile = try values.decode(Bool.self, forKey: .revealCreatedFile)
         conflictPolicy = try values.decode(String.self, forKey: .conflictPolicy)
@@ -96,6 +98,8 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
     }
     public func validate() throws {
         guard schemaVersion == 1 else { throw ConfigurationError.futureVersion(schemaVersion) }
+        guard topLevelEntryIDs.count <= 100, Set(topLevelEntryIDs).count == topLevelEntryIDs.count,
+              topLevelEntryIDs.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 160 }) else { throw ConfigurationError.invalid("一级菜单选择无效或超过 100 项。") }
         guard revision >= 0, [actions.count, favorites.count, watchedLocations.count, integrations.count, templates.count].allSatisfy({ $0 <= 100 }) else { throw ConfigurationError.invalid("配置项数量不能超过 100。") }
         guard Set(actions.map(\.id)).count == actions.count, Set(favorites.map(\.id)).count == favorites.count,
               Set(watchedLocations.map(\.id)).count == watchedLocations.count, Set(integrations.map(\.id)).count == integrations.count,
