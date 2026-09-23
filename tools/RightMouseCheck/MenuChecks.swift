@@ -53,5 +53,17 @@ func runMenuChecks() throws -> Int {
     let mixedMenu = flatten(MenuPolicy.entries(configuration: configuration, context: mixed, pendingMove: pending, now: now))
     try check(mixedMenu.first { $0.id == "template.md" }?.action == .createFile(templateID: "md", destination: nil, name: nil), "Mixed parent folders require an explicit target for creation")
     try check(mixedMenu.first { $0.id == "pasteMove" }?.action == .pasteMove(pendingToken: token, destination: nil, conflictPolicy: .ask), "Mixed parent folders require an explicit paste target")
-    return 6 + (try runMenuPromotionChecks())
+    for legacyPolicy in ["skip", "keepBoth"] {
+        var legacy = configuration
+        legacy.conflictPolicy = legacyPolicy
+        let entries = flatten(MenuPolicy.entries(configuration: legacy, context: mixed, pendingMove: pending, now: now))
+        let policies: [ConflictPolicy] = entries.compactMap { entry in
+            switch entry.action {
+            case let .transfer(_, _, policy), let .pasteMove(_, _, policy): return policy
+            default: return nil
+            }
+        }
+        try check(policies.count >= 3 && policies.allSatisfy { $0 == .ask }, "Legacy \(legacyPolicy) cannot suppress Finder collision prompts")
+    }
+    return 8 + (try runMenuPromotionChecks())
 }

@@ -22,7 +22,8 @@ public enum MenuPolicy {
         let validCount = context.selection.count <= 1024
         let parents = Set(context.selection.map { $0.url.deletingLastPathComponent().standardizedFileURL.path })
         let destination = parents.count > 1 ? nil : context.container
-        let policy = ConflictPolicy(rawValue: configuration.conflictPolicy) ?? .ask
+        // Each new operation asks on collision; legacy saved defaults are ignored.
+        let policy: ConflictPolicy = .ask
         var result: [MenuEntry] = []
         for configured in configuration.actions.enumerated().sorted(by: { $0.element.order == $1.element.order ? $0.offset < $1.offset : $0.element.order < $1.element.order }).map(\.element) where configured.enabled {
             var entry: MenuEntry?

@@ -3,7 +3,7 @@ import AppKit
 import RightMouseCore
 
 private enum SettingsPage: String, CaseIterable, Identifiable {
-    case general = "通用", tools = "文件操作台", menus = "菜单管理", templates = "新建文件", favorites = "常用目录", recent = "最近目标", applications = "打开方式", operations = "文件操作", diagnostics = "权限与诊断", tasks = "任务记录"
+    case general = "通用", tools = "文件操作台", menus = "菜单管理", templates = "新建文件", favorites = "常用目录", recent = "最近目标", applications = "打开方式", diagnostics = "权限与诊断"
     var id: Self { self }
     var icon: String {
         switch self {
@@ -14,9 +14,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .favorites: return "folder.badge.gearshape"
         case .recent: return "clock.badge.checkmark"
         case .applications: return "square.grid.2x2"
-        case .operations: return "arrow.left.arrow.right"
         case .diagnostics: return "checkmark.shield"
-        case .tasks: return "clock.arrow.circlepath"
         }
     }
     var subtitle: String {
@@ -28,15 +26,14 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .favorites: return "收藏经常使用的文件夹，一步打开或整理文件。"
         case .recent: return "最近使用的十个目标目录，选择后可继续整理文件。"
         case .applications: return "在终端、编辑器或其他应用中继续工作。"
-        case .operations: return "设置冲突处理，查看文件操作的行为。"
         case .diagnostics: return "管理 Finder 扩展、目录范围与访问权限。"
-        case .tasks: return "查看每一项结果，取消等待中的操作或核对未完成任务。"
         }
     }
 }
 
 struct RootView: View {
     @ObservedObject var model: AppModel
+    var showTasks: () -> Void
     @ViewState private var page: SettingsPage? = .general
     var body: some View {
         GeometryReader { viewport in
@@ -91,16 +88,14 @@ struct RootView: View {
                 if model.isReadOnly { Text("配置版本不兼容，当前为只读。原始文件已保留。请使用支持此配置的应用版本。").foregroundStyle(.orange).padding(.horizontal, 28) }
                 Group {
                     switch current {
-                    case .general: GeneralSettingsView(model: model, navigate: { page = $0 })
+                    case .general: GeneralSettingsView(model: model, navigate: { page = $0 }, showTasks: showTasks)
                     case .tools: FileToolsView(model: model)
                     case .menus: MenuSettingsView(model: model)
                     case .templates: TemplateSettingsView(model: model)
                     case .favorites: ScrollView { LocationSettingsView(model: model, watched: false) }
                     case .recent: RecentDestinationsView(model: model) { page = .tools }
                     case .applications: ApplicationSettingsView(model: model)
-                    case .operations: OperationSettingsView(model: model)
                     case .diagnostics: DiagnosticsSettingsView(model: model)
-                    case .tasks: TasksView(model: model)
                     }
                 }.frame(minWidth: 0, maxWidth: 960, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
                     .frame(maxWidth: .infinity)
@@ -122,12 +117,13 @@ struct RootView: View {
 private struct GeneralSettingsView: View {
     @ObservedObject var model: AppModel
     var navigate: (SettingsPage) -> Void
+    var showTasks: () -> Void
     var body: some View {
         Form {
             Section("开始使用") {
                 SetupStep(number: 1, title: "启用 Finder 扩展", subtitle: model.isLocalFinderMode ? (model.extensionEnabled ? "扩展已启用。请在普通本地目录右键验收内置菜单。" : "在系统设置中启用 RightMouse Finder 扩展。") : model.isDevelopmentStorage ? (model.extensionEnabled ? "扩展已登记，但共享通信不可用。" : "开发模式下共享通信不可用，Finder 菜单暂不可用。") : (model.extensionEnabled ? "扩展已启用，可继续选择覆盖目录。" : "在系统设置中启用 RightMouse Finder 扩展。"), complete: (!model.isDevelopmentStorage || model.isLocalFinderMode) && model.extensionEnabled) { model.showExtensionSettings() }
                 SetupStep(number: 2, title: "选择使用目录", subtitle: model.isLocalFinderMode ? "本机菜单覆盖普通本地目录；此处目录配置用于共享模式。" : "已配置 \(model.configuration.watchedLocations.count) 个目录；子文件夹一并覆盖。", complete: !model.configuration.watchedLocations.isEmpty) { navigate(.diagnostics) }
-                SetupExerciseView(model: model, showTasks: { navigate(.tasks) })
+                SetupExerciseView(model: model, showTasks: showTasks)
                 SetupStep(number: 4, title: "定制右键菜单", subtitle: model.isLocalFinderMode ? "选择内置操作放到 Finder 一级菜单，其余操作可收进子菜单。" : "新建文件、复制路径、剪切移动与打开方式。", complete: false) { navigate(.menus) }
             }
             if model.authenticatedXPCBuild {
@@ -167,26 +163,6 @@ private struct SetupStep: View {
             VStack(alignment: .leading, spacing: 4) { Text(title).font(.headline); Text(subtitle).font(.caption).foregroundStyle(.secondary) }
             Spacer(); Button(complete ? "管理" : "设置", action: action)
         }.padding(.vertical, 6)
-    }
-}
-
-private struct OperationSettingsView: View {
-    @ObservedObject var model: AppModel
-    var body: some View {
-        Form {
-            Section("同名文件") {
-                Picker("默认处理方式", selection: model.binding(\.conflictPolicy)) { Text("每次询问").tag("ask"); Text("保留两份").tag("keepBoth"); Text("跳过").tag("skip") }
-                Text("不会覆盖已有文件，也不会自动合并目录。保留两份会为新文件增加序号。").font(.caption).foregroundStyle(.secondary)
-            }
-            Section("剪切与粘贴") {
-                Text("剪切时仅暂存选择；粘贴后才执行移动。成功项目从列表清除，失败或跳过项目保留。其他应用改写剪贴板后，待移动列表失效。")
-                Text("退出应用后不会自动恢复活动剪切列表。未完成任务通过任务记录核对。").foregroundStyle(.secondary)
-            }
-            Section("跨磁盘移动") {
-                Text("先复制并校验，再尝试清理来源。无法证明来源可安全清理时保留两份，并显示“源保留”。")
-                Text("取消只影响未完成的工作，不会自动回滚已完成项目。撤销仅对满足身份校验条件的同卷移动开放。").foregroundStyle(.secondary)
-            }
-        }.formStyle(.grouped).disabled(model.isReadOnly)
     }
 }
 

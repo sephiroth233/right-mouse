@@ -99,7 +99,7 @@ enum RightMouseApplication {
         if settingsWindow == nil {
             let window = NSWindow(contentRect: NSRect(origin: .zero, size: WindowLayout.settingsSize), styleMask: [.titled,.closable,.miniaturizable,.resizable], backing: .buffered, defer: false)
             window.title = "RightMouse"; window.isReleasedWhenClosed = false
-            let hosting = NSHostingController(rootView: RootView(model: controller.model))
+            let hosting = NSHostingController(rootView: RootView(model: controller.model, showTasks: { [weak self] in self?.showTasks() }))
             // WindowLayout owns window bounds. Page-specific intrinsic sizes must
             // not change contentMinSize/contentMaxSize when the sidebar changes.
             hosting.sizingOptions = []

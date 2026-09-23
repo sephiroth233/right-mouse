@@ -31,6 +31,39 @@ private struct ConflictCheckFailure: Error, CustomStringConvertible { let descri
         try WireCodec.decoder().decode(LedgerEntry.self, from: PrivateFileIO.read(paths.operationsDirectory.appendingPathComponent("Commands").appendingPathComponent(id.uuidString + ".json")))
     }
 
+    // Removed preferences must not silently skip or rename a new UI operation.
+    for (action, legacyPolicy) in [("copyTo", "skip"), ("moveTo", "keepBoth"), ("pasteMove", "skip")] {
+        let (paths, source, target) = try fixture("legacy-" + action)
+        let file = try seed(source, "collision.txt", "incoming")
+        let existing = try seed(target, "collision.txt", "existing")
+        var prompts = 0
+        let host = try HostController(storagePaths: paths, conflictPrompt: { _, _, _ in
+            prompts += 1
+            return .init(decision: .skip)
+        })
+        try check(host.model.save { $0.conflictPolicy = legacyPolicy }, "\(action): seed legacy conflict preference")
+        if action == "pasteMove" {
+            let staged = CommandRequest(context: ActionContext(entryPoint: .items,
+                container: FileReference(url: source, kindHint: .directory), selection: [FileReference(url: file)]), action: .stageMove)
+            host.submit(staged, interactive: true)
+            for _ in 0..<1_000 {
+                if try entry(paths, staged.requestID).receipt.status == .completed { break }
+                try await Task.sleep(nanoseconds: 10_000_000)
+            }
+            try check(try entry(paths, staged.requestID).receipt.status == .completed, "pasteMove: cut is durably ready")
+        }
+        let previous = Set(host.model.tasks.map(\.id))
+        host.perform(action, files: action == "pasteMove" ? [] : [file], destination: target)
+        guard let task = host.model.tasks.first(where: { !previous.contains($0.id) }) else {
+            throw ConflictCheckFailure(description: "missing legacy preference task")
+        }
+        _ = try await conflictWait(host, task.id)
+        try check(prompts == 1, "\(action): asks despite legacy \(legacyPolicy) preference")
+        try check(data(file) == Data("incoming".utf8) && data(existing) == Data("existing".utf8)
+                  && (try FileManager.default.contentsOfDirectory(atPath: target.path)).count == 1,
+                  "\(action): explicit skip preserves source and target without creating a renamed copy")
+    }
+
     // Both choices can apply to a batch; ordinary single-item choices still prompt twice.
     for (label, decision, batch) in [("single", TransferConflictDecision.keepBoth, false), ("batch-keep", .keepBoth, true), ("batch-skip", .skip, true)] {
         let (paths, source, target) = try fixture(label)

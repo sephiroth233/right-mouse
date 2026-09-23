@@ -273,7 +273,8 @@ import Darwin
         let usesDestination = ["createFile", "pasteMove", "copyTo", "moveTo"].contains(name)
         let context = ActionContext(entryPoint: files.isEmpty ? .container : .items,
                                     container: usesDestination || files.isEmpty ? target : nil, selection: selection)
-        let policy = ConflictPolicy(rawValue: model.configuration.conflictPolicy) ?? .ask
+        // Each new operation asks on collision; legacy saved defaults are ignored.
+        let policy: ConflictPolicy = .ask
         let action: CommandAction
         switch name {
         case "createFile": action = .createFile(templateID: argument.isEmpty ? "txt" : argument, destination: target, name: nil)
