@@ -15,7 +15,7 @@
 
 | 数据 | 共享字段 | 私有侧保留 |
 | --- | --- | --- |
-| 菜单 | revision、available、compactMenu、conflictPolicy、动作标题与排序 | 登录偏好、新建后定位偏好 |
+| 菜单 | revision、available、compactMenu、topLevelEntryIDs、conflictPolicy、动作标题与排序 | 登录偏好、新建后定位偏好 |
 | 目录 | id、name、path、order | bookmarkData、目录身份、使用时间 |
 | 模板 | id、name | resourceName、文件名规则、模板原始内容 |
 | 应用入口 | id、name、adapterType、enabled | bundleID、安装路径与应用验证信息 |
@@ -35,6 +35,10 @@ JSON Schema 验证生产者输出的字段白名单；Swift 接收器只解码�
 完整配置、模板、操作记录、诊断原件和备份放在宿主 Application Support 的 `RightMouse` 根目录。共享根目录保留 Menu、Inbox、Receipts 和待移动列表摘要。开发降级模式使用独立开发目录下的 Host 子目录，不对 Finder 宣称可用。
 
 旧布局在宿主启动、尚未接受新任务时迁移。新账本锁与旧账本锁同时持有；只在同卷上逐文件原子改名，禁止覆盖，保留文件原始字节和身份。中断后已完成项留在私有目录，剩余项仍在旧侧，重启继续。冲突、链接、不可信目录或跨卷情况保留现场并停止，不发布声称迁移成功的快照。旧锁保留到当前宿主退出，避免旧实例在迁移中继续操作。
+
+topLevelEntryIDs 是 schema 1 的可选新增字段，缺省为空数组。最多 100 个不重复 ID，每个 ID 不超过 160 UTF-8 字节。它可以指向整组动作或叶子菜单项；提升的项目从原位置移除，空父菜单自动移除，保留原动作、目标与禁用规则。父子同时提升时，两者分别位于一级，父菜单不再包含该子项；一级项目按勾选顺序排列。
+
+本机模式不使用共享目录，使用 LocalMenuLayout 的 version、compactMenu、topLevelEntryIDs 展示投影。通过 DistributedNotificationCenter 的 object 字符串发送，userInfo 为空；最大 16 KiB，拒绝未知字段、未知版本、重复 ID 及非内置 ID。通知不携带路径、模板内容、应用路径或权限，也不会执行操作。扩展使用自身 UserDefaults 缓存，主应用启动和设置保存时发布，扩展启动及每 5 秒请求刷新。通知可能丢失或被伪造，因此仅影响内置菜单布局，不能作为操作授权；原有文件操作确认仍生效。菜单回调只使用内存快照。
 
 ## 参考
 

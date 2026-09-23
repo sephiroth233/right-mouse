@@ -98,7 +98,7 @@ import Darwin
         diagnostics = DiagnosticLogStore(directory: diagnosticRoot.appendingPathComponent("Diagnostics"))
         model.isDevelopmentStorage = paths.isDevelopmentFallback
         model.isLocalFinderMode = allowsLocalFinderRequests
-        model.storageDiagnostic = allowsLocalFinderRequests ? "本机模式不依赖共享容器。Finder 使用内置菜单；新建、复制、移动与打开方式需在应用中确认。自定义菜单、常用目录与剪切粘贴请在应用内使用。" : paths.developmentDiagnostic
+        model.storageDiagnostic = allowsLocalFinderRequests ? "本机模式不依赖共享容器。Finder 使用内置菜单；新建、复制、移动与打开方式需在应用中确认。菜单管理支持内置操作的一级显示与收起；自定义模板、应用、常用目录与剪切粘贴请在应用内使用。" : paths.developmentDiagnostic
         model.onPerformAction = { [weak self] action, files, target in self?.perform(action, files: files, destination: target) }
         model.onConfigurationChanged = { [weak self] configuration in
             guard let self else { return }

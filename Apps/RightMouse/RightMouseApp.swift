@@ -3,6 +3,7 @@ import AppKit
 import RightMouseCore
 import Carbon
 import OSLog
+import Combine
 
 @main
 enum RightMouseApplication {
@@ -25,6 +26,7 @@ enum RightMouseApplication {
     private var statusItem: NSStatusItem?
     private var receivedDispatch = false
     private var startupURLs: [URL] = []
+    private var localLayoutSubscription: AnyCancellable?
     private let logger = Logger(subsystem: "cn.rightmouse.RightMouse", category: "URLDispatch")
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleURL(_:reply:)),
@@ -39,6 +41,12 @@ enum RightMouseApplication {
         installMenu()
         do {
             controller = try HostController()
+            if Bundle.main.object(forInfoDictionaryKey: "RightMouseLocalFinderMode") as? Bool == true, let controller {
+                DistributedNotificationCenter.default().addObserver(self, selector: #selector(sendLocalLayout), name: LocalMenuLayout.requested, object: nil, suspensionBehavior: .deliverImmediately)
+                localLayoutSubscription = controller.model.$configuration.sink { configuration in
+                    Self.publishLocalLayout(configuration)
+                }
+            }
             controller?.showTasks = { [weak self] in self?.showTasks() }
             controller?.scanInbox()
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -73,6 +81,13 @@ enum RightMouseApplication {
     }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { showSettings(); return true }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+    @objc private func sendLocalLayout() {
+        if let controller { Self.publishLocalLayout(controller.model.configuration) }
+    }
+    private static func publishLocalLayout(_ configuration: AppConfiguration) {
+        guard let payload = try? LocalMenuLayout(configuration: configuration).encoded() else { return }
+        DistributedNotificationCenter.default().postNotificationName(LocalMenuLayout.changed, object: payload, userInfo: nil, deliverImmediately: true)
+    }
     @objc private func showSettings() {
         guard let controller else { return }
         if settingsWindow == nil {

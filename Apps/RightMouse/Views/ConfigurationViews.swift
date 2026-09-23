@@ -5,29 +5,49 @@ import RightMouseCore
 struct MenuSettingsView: View {
     @ObservedObject var model: AppModel
     @ViewState private var previewSelection = true
+    private var effectiveConfiguration: AppConfiguration {
+        model.isLocalFinderMode ? LocalMenuLayout(configuration: model.configuration).configuration : model.configuration
+    }
+    private var candidates: [MenuEntry] {
+        var configuration = effectiveConfiguration
+        configuration.compactMenu = false; configuration.topLevelEntryIDs = []
+        for index in configuration.actions.indices { configuration.actions[index].groupID = nil }
+        let folder = FileReference(url: URL(fileURLWithPath: "/示例/项目", isDirectory: true), kindHint: .directory)
+        let file = FileReference(url: URL(fileURLWithPath: "/示例/项目/说明.md"), kindHint: .file)
+        return MenuPolicy.entries(configuration: configuration, context: ActionContext(entryPoint: .items, container: folder, selection: [file]), pendingMove: PendingMoveSnapshot(token: UUID(), count: 1, expiresAt: .distantFuture))
+    }
     private var preview: [MenuEntry] {
         let folder = FileReference(url: URL(fileURLWithPath: "/示例/项目", isDirectory: true), kindHint: .directory)
         let file = FileReference(url: URL(fileURLWithPath: "/示例/项目/说明.md"), kindHint: .file)
-        return MenuPolicy.entries(configuration: model.configuration, context: ActionContext(entryPoint: previewSelection ? .items : .container, container: folder, selection: previewSelection ? [file] : []))
+        return MenuPolicy.entries(configuration: effectiveConfiguration, context: ActionContext(entryPoint: previewSelection ? .items : .container, container: folder, selection: previewSelection ? [file] : []))
     }
     var body: some View {
         HStack(alignment: .top, spacing: 20) {
             VStack(alignment: .leading, spacing: 14) {
-                Toggle("紧凑模式", isOn: model.binding(\.compactMenu))
-                Text("用箭头或拖动调整顺序；分组名称相同的项目会进入同一子菜单。").font(.caption).foregroundStyle(.secondary)
+                Toggle("其余菜单收进 RightMouse 子菜单", isOn: model.binding(\.compactMenu))
+                Text("勾选要直接显示在 Finder 一级菜单的项目。整组提升保留子菜单；具体操作提升后可直接点击。").font(.caption).foregroundStyle(.secondary)
                 List {
-                    ForEach(Array(model.configuration.actions.enumerated()), id: \.element.id) { index, action in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Image(systemName: MenuIcon.command(action.commandType)).frame(width: 20).foregroundStyle(.secondary).accessibilityHidden(true)
-                                Toggle(action.title, isOn: Binding(get: { action.enabled }, set: { enabled in model.save { $0.actions[index].enabled = enabled } }))
-                                Spacer()
-                                MoveControls(index: index, count: model.configuration.actions.count) { offset in move(index, offset) }
-                            }
-                            TextField("分组（留空表示直接显示）", text: Binding(get: { action.groupID ?? "" }, set: { group in model.save { $0.actions[index].groupID = group.isEmpty ? nil : group } }))
-                                .textFieldStyle(.roundedBorder).font(.caption).accessibilityLabel("\(action.title)分组")
-                        }.padding(.vertical, 5)
-                    }.onMove { source, target in model.save { value in value.actions.move(fromOffsets: source, toOffset: target); normalize(&value.actions) } }
+                    Section("放到 Finder 一级菜单") {
+                        ForEach(candidates) { entry in
+                            TopLevelMenuChoice(entry: entry, model: model)
+                        }
+                    }
+                    if !model.isLocalFinderMode {
+                        Section("操作开关、排序与分组") {
+                        ForEach(Array(model.configuration.actions.enumerated()), id: \.element.id) { index, action in
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Image(systemName: MenuIcon.command(action.commandType)).frame(width: 20).foregroundStyle(.secondary).accessibilityHidden(true)
+                                    Toggle(action.title, isOn: Binding(get: { action.enabled }, set: { enabled in model.save { $0.actions[index].enabled = enabled } }))
+                                    Spacer()
+                                    MoveControls(index: index, count: model.configuration.actions.count) { offset in move(index, offset) }
+                                }
+                                TextField("分组（留空表示直接显示）", text: Binding(get: { action.groupID ?? "" }, set: { group in model.save { $0.actions[index].groupID = group.isEmpty ? nil : group } }))
+                                    .textFieldStyle(.roundedBorder).font(.caption).accessibilityLabel("\(action.title)分组")
+                            }.padding(.vertical, 5)
+                        }.onMove { source, target in model.save { value in value.actions.move(fromOffsets: source, toOffset: target); normalize(&value.actions) } }
+                        }
+                    }
                 }.listStyle(.inset).clipShape(RoundedRectangle(cornerRadius: 8))
             }.frame(maxWidth: .infinity).disabled(model.isReadOnly)
             VStack(alignment: .leading, spacing: 12) {
@@ -39,7 +59,7 @@ struct MenuSettingsView: View {
                         ForEach(preview) { entry in MenuPreviewRow(entry: entry, integrations: model.configuration.integrations) }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
                 }.rightMouseGlass(radius: 16)
-                Text("与 Finder 共用菜单规则；没有待移动文件时不显示粘贴。系统菜单中的最终位置由 Finder 决定。").font(.caption).foregroundStyle(.secondary)
+                Text(model.isLocalFinderMode ? "本机模式支持内置菜单的一级显示和收起设置，通常立即生效；若未更新，请稍候约 5 秒后重新右键查看。自定义模板、应用和分组暂不同步。最终位置由 Finder 决定。" : "与 Finder 共用菜单规则；没有待移动文件时不显示粘贴。系统菜单中的最终位置由 Finder 决定。").font(.caption).foregroundStyle(.secondary)
             }.frame(minWidth: 205, idealWidth: 225, maxWidth: 245)
         }.padding(.horizontal, 28).padding(.bottom, 24)
     }
@@ -47,6 +67,32 @@ struct MenuSettingsView: View {
         model.save { value in value.actions.swapAt(index, index + delta); normalize(&value.actions) }
     }
     private func normalize(_ actions: inout [ConfiguredAction]) { for index in actions.indices { actions[index].order = index } }
+}
+
+private struct TopLevelMenuChoice: View {
+    let entry: MenuEntry
+    @ObservedObject var model: AppModel
+    var depth = 0
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Toggle(isOn: Binding(get: { model.configuration.topLevelEntryIDs.contains(entry.id) }, set: { selected in
+                model.save { configuration in
+                    configuration.topLevelEntryIDs.removeAll { $0 == entry.id }
+                    if selected { configuration.topLevelEntryIDs.append(entry.id) }
+                }
+            })) {
+                HStack(spacing: 6) {
+                    MenuEntryIcon(entry: entry, integrations: model.configuration.integrations)
+                    Text(entry.children.isEmpty ? MenuPolicy.topLevelTitle(entry) : "\(entry.title)（整组）")
+                        .font(depth == 0 ? .body : .callout)
+                }
+            }.toggleStyle(.checkbox)
+                .accessibilityLabel("一级菜单：\(entry.children.isEmpty ? MenuPolicy.topLevelTitle(entry) : entry.title + "整组")")
+            ForEach(entry.children) { child in
+                AnyView(TopLevelMenuChoice(entry: child, model: model, depth: depth + 1)).padding(.leading, 18)
+            }
+        }.padding(.vertical, 3)
+    }
 }
 
 private struct MenuPreviewRow: View {

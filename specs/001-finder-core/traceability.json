@@ -359,7 +359,8 @@
         "evidence/EV-private-storage-recovery-001.md",
         "../../Config/validation/finder-load-2026-09-22.md",
         "evidence/EV-workflows-001.md",
-        "evidence/EV-core-checks-001.md"
+        "evidence/EV-core-checks-001.md",
+        "evidence/EV-top-level-menu-001.md"
       ]
     },
     {
@@ -489,7 +490,8 @@
         "evidence/EV-private-storage-recovery-001.md",
         "../../docs/sdd/evidence/menu-policy-benchmark/2026-09-23-menu-snapshot-recent/README.md",
         "evidence/EV-liquid-glass-001.md",
-        "evidence/EV-source-isolation-001.md"
+        "evidence/EV-source-isolation-001.md",
+        "evidence/EV-top-level-menu-001.md"
       ]
     },
     {
@@ -740,9 +742,10 @@
         "evidence/EV-core-checks-001.md",
         "evidence/EV-workflows-001.md",
         "evidence/EV-private-storage-recovery-001.md",
-        "../../docs/sdd/evidence/menu-policy-benchmark/2026-09-23-menu-snapshot-recent/README.md"
+        "../../docs/sdd/evidence/menu-policy-benchmark/2026-09-23-menu-snapshot-recent/README.md",
+        "evidence/EV-top-level-menu-001.md"
       ],
-      "remaining": "配置损坏/未来版本、容量及快照规则有证据；实际预览与 Finder 菜单修改、重启后一致性未验收。"
+      "remaining": "本机一级菜单选择、取消与预览对照已有真实 Finder 证据；正式共享模式的菜单开关、排序、分组及跨系统一致性仍待验收。"
     },
     {
       "id": "AC-016",

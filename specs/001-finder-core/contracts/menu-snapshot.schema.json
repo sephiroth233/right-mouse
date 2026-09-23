@@ -10,6 +10,7 @@
     "revision": {"type": "integer", "minimum": 0},
     "available": {"type": "boolean"},
     "compactMenu": {"type": "boolean"},
+    "topLevelEntryIDs": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 160}},
     "conflictPolicy": {"enum": ["ask", "skip", "keepBoth"]},
     "actions": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/action"}},
     "favorites": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/location"}},

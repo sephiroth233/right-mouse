@@ -128,12 +128,12 @@ private struct GeneralSettingsView: View {
                 SetupStep(number: 1, title: "启用 Finder 扩展", subtitle: model.isLocalFinderMode ? (model.extensionEnabled ? "扩展已启用。请在普通本地目录右键验收内置菜单。" : "在系统设置中启用 RightMouse Finder 扩展。") : model.isDevelopmentStorage ? (model.extensionEnabled ? "扩展已登记，但共享通信不可用。" : "开发模式下共享通信不可用，Finder 菜单暂不可用。") : (model.extensionEnabled ? "扩展已启用，可继续选择覆盖目录。" : "在系统设置中启用 RightMouse Finder 扩展。"), complete: (!model.isDevelopmentStorage || model.isLocalFinderMode) && model.extensionEnabled) { model.showExtensionSettings() }
                 SetupStep(number: 2, title: "选择使用目录", subtitle: model.isLocalFinderMode ? "本机菜单覆盖普通本地目录；此处目录配置用于共享模式。" : "已配置 \(model.configuration.watchedLocations.count) 个目录；子文件夹一并覆盖。", complete: !model.configuration.watchedLocations.isEmpty) { navigate(.diagnostics) }
                 SetupExerciseView(model: model, showTasks: { navigate(.tasks) })
-                SetupStep(number: 4, title: "定制右键菜单", subtitle: model.isLocalFinderMode ? "本机版采用固定菜单；自定义配置暂不传递到 Finder。" : "新建文件、复制路径、剪切移动与打开方式。", complete: false) { navigate(.menus) }
+                SetupStep(number: 4, title: "定制右键菜单", subtitle: model.isLocalFinderMode ? "选择内置操作放到 Finder 一级菜单，其余操作可收进子菜单。" : "新建文件、复制路径、剪切移动与打开方式。", complete: false) { navigate(.menus) }
             }
             Section("偏好设置") {
                 Toggle("登录时启动 RightMouse", isOn: Binding(get: { model.configuration.launchAtLogin }, set: model.setLaunchAtLogin))
                 Toggle("新建文件后在 Finder 中定位", isOn: model.binding(\.revealCreatedFile))
-                Toggle("将所有操作收进一个紧凑菜单", isOn: model.binding(\.compactMenu))
+                Toggle("将未置顶的操作收进 RightMouse 子菜单", isOn: model.binding(\.compactMenu))
             }.disabled(model.isReadOnly)
             Section {
                 LabeledContent("版本", value: "0.1.0 · 开发版")

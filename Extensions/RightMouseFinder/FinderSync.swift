@@ -42,11 +42,15 @@ final class FinderSync: FIFinderSync {
             DispatchQueue.main.async { self?.applicationIcons = loaded }
         }
         if localMode {
-            var defaults = AppConfiguration()
-            defaults.compactMenu = true
-            defaults.actions.removeAll { ["stageMove", "pasteMove", "openFavorite"].contains($0.commandType) }
-            defaults.templates.removeAll { !LocalFinderRequest.allowedTemplateIDs.contains($0.id) }
-            configuration = MenuConfigurationSnapshot(configuration: defaults)
+            let cached = UserDefaults.standard.string(forKey: LocalMenuLayout.cacheKey)
+                .flatMap { try? LocalMenuLayout.decode($0) }
+            configuration = MenuConfigurationSnapshot(configuration: cached?.configuration ?? LocalMenuLayout.baseConfiguration)
+            DistributedNotificationCenter.default().addObserver(self, selector: #selector(receiveLocalLayout(_:)), name: LocalMenuLayout.changed, object: nil, suspensionBehavior: .deliverImmediately)
+            requestLocalLayout()
+            let timer = DispatchSource.makeTimerSource(queue: .main)
+            timer.schedule(deadline: .now() + 5, repeating: 5)
+            timer.setEventHandler { [weak self] in self?.requestLocalLayout() }
+            timer.resume(); refreshTimer = timer
             refreshLocalScope()
             for name in [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification] {
                 NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(refreshLocalScope), name: name, object: nil)
@@ -59,7 +63,25 @@ final class FinderSync: FIFinderSync {
         ioQueue.async { [weak self] in self?.initializeStorage() }
     }
 
-    deinit { sources.forEach { $0.cancel() }; refreshTimer?.cancel(); NSWorkspace.shared.notificationCenter.removeObserver(self) }
+    deinit { sources.forEach { $0.cancel() }; refreshTimer?.cancel(); NSWorkspace.shared.notificationCenter.removeObserver(self); DistributedNotificationCenter.default().removeObserver(self) }
+
+    private func requestLocalLayout() {
+        DistributedNotificationCenter.default().postNotificationName(LocalMenuLayout.requested, object: nil, userInfo: nil, deliverImmediately: true)
+    }
+    @objc private func receiveLocalLayout(_ notification: Notification) {
+        guard localMode, let payload = notification.object as? String,
+              let layout = try? LocalMenuLayout.decode(payload) else { return }
+        // Only fixed built-in IDs and two presentation preferences cross this
+        // unauthenticated channel. Actual operations keep their confirmation.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let snapshot = MenuConfigurationSnapshot(configuration: layout.configuration)
+            guard self.configuration != snapshot else { return }
+            self.configuration = snapshot
+            UserDefaults.standard.set(payload, forKey: LocalMenuLayout.cacheKey)
+            self.logger.notice("Local menu layout updated; top-level count: \(layout.topLevelEntryIDs.count)")
+        }
+    }
 
     @objc private func refreshLocalScope() {
         // Monitoring affects Finder UI only. It grants no filesystem access.
