@@ -69,7 +69,6 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
             .init(id: "pasteMove", commandType: "pasteMove", title: "粘贴待移动文件", order: 3),
             .init(id: "copyTo", commandType: "copyTo", title: "复制到", order: 4),
             .init(id: "moveTo", commandType: "moveTo", title: "移动到", order: 5),
-            .init(id: "openFavorite", commandType: "openFavorite", title: "常用目录", order: 6),
             .init(id: "openWith", commandType: "openWith", title: "打开方式", order: 7)
         ]
         integrations = [

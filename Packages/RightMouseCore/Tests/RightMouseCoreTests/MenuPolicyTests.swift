@@ -53,7 +53,7 @@ final class MenuPolicyTests: XCTestCase {
         let context = ActionContext(entryPoint: .items, container: background.container, selection: (0..<1025).map { FileReference(url: URL(fileURLWithPath: "/tmp/\($0)")) })
         let entries = flatten(MenuPolicy.entries(configuration: AppConfiguration(), context: context))
         XCTAssertFalse(entries.first { $0.id == "stageMove" }!.enabled)
-        XCTAssertFalse(entries.first { $0.id == "copy.choose" }!.enabled)
+        XCTAssertFalse(entries.first { $0.id == "copyTo" }!.enabled)
         XCTAssertFalse(entries.first { $0.id == "copy.path" }!.enabled)
     }
 }

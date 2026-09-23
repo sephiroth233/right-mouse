@@ -58,9 +58,9 @@ func runStorageSeparationChecks() throws -> Int {
     let context = ActionContext(entryPoint: .items, container: nil, selection: [.init(url: URL(fileURLWithPath: "/fixture/source.txt"), kindHint: .file)])
     func flatten(_ entries: [MenuEntry]) -> [String] { entries.flatMap { [$0.id + "|" + $0.title] + flatten($0.children) } }
     try check(flatten(MenuPolicy.entries(configuration: saved, context: context)) == flatten(MenuPolicy.entries(snapshot: snapshot, context: context)), "host preview and Finder projection produce the same menu structure")
-    let target = MenuPolicy.entries(snapshot: snapshot, context: context).first { $0.id == "copyTo" }!.children.first!
+    let target = MenuPolicy.entries(snapshot: snapshot, context: context).first { $0.id == "copyTo" }!
     if case let .transfer(_, destination, _) = target.action {
-        try check(destination?.bookmarkToken == saved.favorites.first?.id, "Finder action carries a token that only the host resolves")
+        try check(destination == nil, "Finder transfer requests a picker instead of using legacy favorites")
     } else { throw StorageSeparationFailure(description: "missing transfer action") }
     try snapshotStore.publish(saved, available: false)
     try check(try MenuPolicy.entries(snapshot: snapshotStore.load(), context: context).isEmpty, "unavailable snapshot exposes no business commands")

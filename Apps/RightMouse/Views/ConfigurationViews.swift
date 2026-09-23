@@ -8,6 +8,7 @@ struct MenuSettingsView: View {
     private var effectiveConfiguration: AppConfiguration {
         model.isLocalFinderMode && !model.authenticatedXPCBuild ? LocalMenuLayout(configuration: model.configuration).configuration : model.configuration
     }
+    private var actionIndices: [Int] { model.configuration.actions.indices.filter { model.configuration.actions[$0].commandType != "openFavorite" } }
     private var candidates: [MenuEntry] {
         var configuration = effectiveConfiguration
         configuration.compactMenu = false; configuration.topLevelEntryIDs = []
@@ -34,18 +35,19 @@ struct MenuSettingsView: View {
                     }
                     if !model.isLocalFinderMode || model.authenticatedXPCBuild {
                         Section("操作开关、排序与分组") {
-                        ForEach(Array(model.configuration.actions.enumerated()), id: \.element.id) { index, action in
+                        ForEach(Array(actionIndices.enumerated()), id: \.element) { position, index in
+                            let action = model.configuration.actions[index]
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack {
                                     Image(systemName: MenuIcon.command(action.commandType)).frame(width: 20).foregroundStyle(.secondary).accessibilityHidden(true)
                                     Toggle(action.title, isOn: Binding(get: { action.enabled }, set: { enabled in model.save { $0.actions[index].enabled = enabled } }))
                                     Spacer()
-                                    MoveControls(index: index, count: model.configuration.actions.count) { offset in move(index, offset) }
+                                    MoveControls(index: position, count: actionIndices.count) { offset in move(position, offset) }
                                 }
                                 TextField("分组（留空表示直接显示）", text: Binding(get: { action.groupID ?? "" }, set: { group in model.save { $0.actions[index].groupID = group.isEmpty ? nil : group } }))
                                     .textFieldStyle(.roundedBorder).font(.caption).accessibilityLabel("\(action.title)分组")
                             }.padding(.vertical, 5)
-                        }.onMove { source, target in model.save { value in value.actions.move(fromOffsets: source, toOffset: target); normalize(&value.actions) } }
+                        }.onMove { source, target in model.save { value in let indices = actionIndices; var visible = indices.map { value.actions[$0] }; visible.move(fromOffsets: source, toOffset: target); for (position, index) in indices.enumerated() { value.actions[index] = visible[position] }; normalize(&value.actions) } }
                         }
                     }
                 }.listStyle(.inset).clipShape(RoundedRectangle(cornerRadius: 8))
@@ -64,7 +66,7 @@ struct MenuSettingsView: View {
         }.padding(.horizontal, 28).padding(.bottom, 24)
     }
     private func move(_ index: Int, _ delta: Int) {
-        model.save { value in value.actions.swapAt(index, index + delta); normalize(&value.actions) }
+        model.save { value in value.actions.swapAt(actionIndices[index], actionIndices[index + delta]); normalize(&value.actions) }
     }
     private func normalize(_ actions: inout [ConfiguredAction]) { for index in actions.indices { actions[index].order = index } }
 }

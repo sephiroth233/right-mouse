@@ -46,18 +46,10 @@ public enum MenuPolicy {
             case "copyTo", "moveTo":
                 if selection {
                     let mode: CommandTransferMode = configured.commandType == "copyTo" ? .copy : .move
-                    var children = configuration.favorites.sorted { $0.order < $1.order }.map {
-                        MenuEntry(id: "\(mode.rawValue).\($0.id)", title: $0.name, enabled: validCount, action: .transfer(mode: mode, destination: FileReference(refID: $0.id, url: URL(fileURLWithPath: $0.path, isDirectory: true), kindHint: .directory, bookmarkToken: $0.id), conflictPolicy: policy))
-                    }
-                    children.append(MenuEntry(id: "\(mode.rawValue).choose", title: "选择目录…", enabled: validCount, action: .transfer(mode: mode, destination: nil, conflictPolicy: policy)))
-                    entry = MenuEntry(id: configured.id, title: configured.title, children: children)
+                    entry = MenuEntry(id: configured.id, title: configured.title + "…", enabled: validCount,
+                                      action: .transfer(mode: mode, destination: nil, conflictPolicy: policy))
                 }
-            case "openFavorite":
-                if !configuration.favorites.isEmpty {
-                    entry = MenuEntry(id: configured.id, title: configured.title, children: configuration.favorites.sorted { $0.order < $1.order }.map {
-                        MenuEntry(id: "favorite.\($0.id)", title: $0.name, action: .openFavorite(favoriteID: $0.id))
-                    })
-                }
+            case "openFavorite": break // Retired; old configuration must not restore it.
             case "openWith":
                 entry = MenuEntry(id: configured.id, title: configured.title, children: configuration.integrations.filter(\.enabled).map {
                     MenuEntry(id: "integration.\($0.id)", title: $0.name, enabled: validCount, action: .openWith(integrationID: $0.id, mode: $0.adapterType == "terminal" || !selection ? .directory : .files))
@@ -103,7 +95,7 @@ public enum MenuPolicy {
         case .createFile: return "新建 \(entry.title)"
         case .copyText: return "复制\(entry.title)"
         case let .openWith(id, _): return id == "terminal" ? "在终端中打开" : "使用 \(entry.title) 打开"
-        case let .transfer(mode, _, _): return "\(mode == .copy ? "复制到" : "移动到")\(entry.title)"
+        case .transfer: return entry.title
         case .openFavorite: return "打开\(entry.title)"
         default: return entry.title
         }

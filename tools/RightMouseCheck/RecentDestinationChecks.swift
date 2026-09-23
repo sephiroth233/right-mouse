@@ -79,13 +79,10 @@ func runRecentDestinationChecks() throws -> Int {
     try check(find("move.recent", in: menu) == nil, "legacy history must not reintroduce recent move destinations")
     for mode in [CommandTransferMode.copy, .move] {
         let favoriteID = config.favorites[0].id
-        guard case let .transfer(actualMode, destination, policy)? = find("\(mode.rawValue).\(favoriteID)", in: menu)?.action else {
-            throw RecentCheckFailure(description: "favorite target missing after removing recent targets")
-        }
-        try check(actualMode == mode && destination?.bookmarkToken == favoriteID && policy == .ask,
-                  "favorite destination retains its authorization token and asks on conflicts")
-        try check(find("\(mode.rawValue).choose", in: menu)?.action == .transfer(mode: mode, destination: nil, conflictPolicy: .ask),
-                  "directory picker remains available without recent destinations")
+        try check(find("\(mode.rawValue).\(favoriteID)", in: menu) == nil,
+                  "legacy favorites must not reappear in transfer menus")
+        try check(find(mode == .copy ? "copyTo" : "moveTo", in: menu)?.action == .transfer(mode: mode, destination: nil, conflictPolicy: .ask),
+                  "transfer directly opens a directory picker without favorites")
     }
     // Rename the original object and install a different object at its former path.
     let original = history[0]

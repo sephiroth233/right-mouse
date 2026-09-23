@@ -3,14 +3,13 @@ import AppKit
 import RightMouseCore
 
 private enum SettingsPage: String, CaseIterable, Identifiable {
-    case general = "通用", menus = "菜单管理", templates = "新建文件", favorites = "常用目录", applications = "打开方式", diagnostics = "权限与诊断"
+    case general = "通用", menus = "菜单管理", templates = "新建文件", applications = "打开方式", diagnostics = "权限与诊断"
     var id: Self { self }
     var icon: String {
         switch self {
         case .general: return "slider.horizontal.3"
         case .menus: return "list.bullet.indent"
         case .templates: return "doc.badge.plus"
-        case .favorites: return "folder.badge.gearshape"
         case .applications: return "square.grid.2x2"
         case .diagnostics: return "checkmark.shield"
         }
@@ -20,7 +19,6 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .general: return "让常用文件操作，就在右键菜单里。"
         case .menus: return "只留下常用操作，按你的习惯排列。"
         case .templates: return "用真实模板创建文件，保留格式与初始内容。"
-        case .favorites: return "收藏经常使用的文件夹，一步打开或整理文件。"
         case .applications: return "在终端、编辑器或其他应用中继续工作。"
         case .diagnostics: return "管理 Finder 扩展、目录范围与访问权限。"
         }
@@ -87,7 +85,6 @@ struct RootView: View {
                     case .general: GeneralSettingsView(model: model, navigate: { page = $0 }, showTasks: showTasks)
                     case .menus: MenuSettingsView(model: model)
                     case .templates: TemplateSettingsView(model: model)
-                    case .favorites: ScrollView { LocationSettingsView(model: model, watched: false) }
                     case .applications: ApplicationSettingsView(model: model)
                     case .diagnostics: DiagnosticsSettingsView(model: model)
                     }

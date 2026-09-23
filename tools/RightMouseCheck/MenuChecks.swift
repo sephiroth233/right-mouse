@@ -65,5 +65,13 @@ func runMenuChecks() throws -> Int {
         }
         try check(policies.count >= 3 && policies.allSatisfy { $0 == .ask }, "Legacy \(legacyPolicy) cannot suppress Finder collision prompts")
     }
-    return 8 + (try runMenuPromotionChecks())
+    var retired = configuration
+    let favorite = SavedLocation(name: "Legacy favorite", path: "/tmp/legacy")
+    retired.favorites = [favorite]
+    retired.actions.append(.init(id: "old-favorite", commandType: "openFavorite", title: "常用目录"))
+    retired.topLevelEntryIDs = ["old-favorite", "favorite.\(favorite.id)", "copyTo", "moveTo"]
+    let retiredMenu = flatten(MenuPolicy.entries(configuration: retired, context: mixed))
+    try check(!retiredMenu.contains { $0.id == "old-favorite" || $0.id.hasPrefix("favorite.") || $0.title.contains("Legacy favorite") }, "Old favorites and promoted entries remain absent")
+    try check(retiredMenu.first { $0.id == "copyTo" }?.title == "复制到…" && retiredMenu.first { $0.id == "moveTo" }?.title == "移动到…", "Promoted transfer commands keep concise picker labels")
+    return 10 + (try runMenuPromotionChecks())
 }
