@@ -53,3 +53,14 @@ GitHub Actions 复用本机预览版脚本，检查代码并分别生成 Apple S
 - [macOS 26 Intel 镜像工具链](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md)
 - [Artifact 上传与保留设置](https://github.com/actions/upload-artifact)
 - [GitHub Releases](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases)
+
+## 0.2.1 本机预览版发布验证（2026-09-23）
+
+- 标签：`v0.2.1-local.1`；安装包源码提交：`a5e5ba831cddda1419e26fb07e1955f0044285cd`。
+- [发布流水线](https://github.com/sephiroth233/right-mouse/actions/runs/35825610973)全部通过；arm64 与 x86_64 各通过 387 项核心检查、514 项宿主检查、嵌套签名及 DMG 校验。
+- arm64 构建环境 macOS 26.6.2，Intel 为 macOS 26.6.1，均使用 SDK 26.5。
+- [发行页](https://github.com/sephiroth233/right-mouse/releases/tag/v0.2.1-local.1)公开提供两个 DMG、对应 SHA-256 文件和两个构建元数据文件，共六项附件。两种 DMG 已从发行页重新下载，SHA-256、镜像校验及源码版本匹配均通过。
+- arm64 SHA-256：`53baa4a58fa177e56a76b89355e884f4636fd5ce7b539399ae94f88d62a7a4ab`。
+- x86_64 SHA-256：`c8fd62fa9377c5d37c4cdae5d94cf4438574ea7f73f40c9e77dd1297d92afd98`。
+- 为重新安装验收，当前测试机已卸载旧安装版和三个本地预览副本，移除当前应用配置、扩展容器、连接服务与 Finder 注册，并重置主应用的隐私授权。复查没有残留进程、服务、扩展登记或偏好域。项目源码和 Git 历史保留；旧配置仅存于本地隔离备份，不提交仓库。
+- 新发行版未在清理后的测试机安装，首次下载安装及真实系统登录留待用户验收；仍是未经过 Apple 公证的预览版。
