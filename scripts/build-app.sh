@@ -119,6 +119,8 @@ def preflight(root, build, group, identity, mode, host_profile, extension_profil
     for name, label in [('RightMouse.entitlements', 'host'), ('FinderExtension.entitlements', 'extension')]:
         raw = (root/'Config'/name).read_text().replace('$(RIGHTMOUSE_APP_GROUP)', group)
         entitlement = plistlib.loads(raw.encode())
+        if identity == '-' and mode == 'development':
+            entitlement.pop('com.apple.security.application-groups', None)
         if label in profiles:
             profile = profiles[label]
             entitlement[profile['applicationKey']] = profile['applicationIdentifier']
@@ -135,6 +137,8 @@ def embed(root, build, app):
         raw = (root/'Config'/name).read_text().replace('$(PRODUCT_BUNDLE_IDENTIFIER)', bundle_id).replace('$(RIGHTMOUSE_APP_GROUP)', metadata['group'])
         info = plistlib.loads(raw.encode())
         info['RightMouseAllowDevelopmentStorageFallback'] = label == 'host' and metadata['identity'] == '-' and metadata['mode'] == 'development'
+        info['RightMouseLocalFinderMode'] = metadata['identity'] == '-' and metadata['mode'] == 'development'
+        if info['RightMouseLocalFinderMode']: info.pop('RightMouseAppGroup', None)
         (contents/'Info.plist').write_bytes(plistlib.dumps(info))
         target = contents/'embedded.provisionprofile'
         # Always remove an older embedded profile before the current build is signed.
@@ -154,6 +158,11 @@ def verify(build, app):
         expected_fallback = label == 'host' and metadata['identity'] == '-' and metadata['mode'] == 'development'
         if not isinstance(fallback_flag, bool) or fallback_flag != expected_fallback:
             fail(label + ' development storage flag does not match its signing mode.')
+        expected_local = metadata['identity'] == '-' and metadata['mode'] == 'development'
+        if info.get('RightMouseLocalFinderMode') is not expected_local:
+            fail(label + ' local Finder mode does not match its signing mode.')
+        if expected_local and 'RightMouseAppGroup' in info:
+            fail(label + ' local Finder mode must not declare an App Group.')
         actual_data = run(['/usr/bin/codesign', '-d', '--entitlements', '-', '--xml', str(bundle)]).stdout
         try: actual = plistlib.loads(actual_data)
         except Exception: fail(label + ' signed entitlements could not be decoded.')
@@ -187,7 +196,7 @@ def verify(build, app):
             if expiry <= datetime.datetime.now(datetime.timezone.utc): fail(label + ' profile expired while building.')
     if len(set(teams)) > 1: fail('Host and extension were signed by different teams.')
     if metadata['identity'] == '-':
-        print('Ad-hoc entitlements match; no stale embedded profiles. App Group authorization remains unverified.')
+        print('Ad-hoc local Finder mode verified; sandbox retained, no App Group entitlement or stale profiles.')
     else:
         print('Signed entitlements, team, embedded profiles and certificate allowlists verified.')
 
@@ -228,5 +237,5 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 python3 "$VALIDATOR" verify "$BUILD" "$APP"
 printf '\nBuilt: %s\n' "$APP"
 if [[ "$IDENTITY" == "-" ]]; then
-    printf '%s\n' 'Development build with ad-hoc signatures. App Group access and Finder activation must be verified separately; this is not a notarized release.'
+    printf '%s\n' 'Local Finder development build: built-in menu with host confirmation, no App Group dependency. Not a notarized release.'
 fi

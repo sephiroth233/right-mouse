@@ -1,6 +1,8 @@
 import SwiftUI
 import AppKit
 import RightMouseCore
+import Carbon
+import OSLog
 
 @main
 enum RightMouseApplication {
@@ -19,6 +21,17 @@ enum RightMouseApplication {
     private var tasksWindow: NSWindow?
     private var statusItem: NSStatusItem?
     private var receivedDispatch = false
+    private var startupURLs: [URL] = []
+    private let logger = Logger(subsystem: "cn.rightmouse.RightMouse", category: "URLDispatch")
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        NSAppleEventManager.shared().setEventHandler(self, andSelector: #selector(handleURL(_:reply:)),
+            forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL))
+    }
+    @objc private func handleURL(_ event: NSAppleEventDescriptor, reply: NSAppleEventDescriptor) {
+        guard let value = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
+              value.utf8.count <= LocalFinderRequest.maximumURLBytes, let url = URL(string: value) else { return }
+        application(NSApplication.shared, open: [url])
+    }
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMenu()
         do {
@@ -32,6 +45,8 @@ enum RightMouseApplication {
             menu.addItem(withTitle: "文件任务", action: #selector(showTasks), keyEquivalent: "").target = self
             menu.addItem(.separator()); menu.addItem(withTitle: "退出 RightMouse", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
             item.menu = menu; statusItem = item
+            let waiting = startupURLs; startupURLs.removeAll()
+            if !waiting.isEmpty { self.application(NSApplication.shared, open: waiting) }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
                 guard let self, !self.receivedDispatch else { return }
                 self.showSettings()
@@ -41,14 +56,16 @@ enum RightMouseApplication {
         }
     }
     func application(_ application: NSApplication, open urls: [URL]) {
+        logger.notice("Received URL event, count: \(urls.count)")
+        guard let controller else { startupURLs.append(contentsOf: urls.prefix(max(0, 8 - startupURLs.count))); return }
         for url in urls {
             if url.scheme == "rightmouse", url.host == "settings", url.query == nil, url.fragment == nil { showSettings(); continue }
             receivedDispatch = true
+            if url.host == "local-action" { controller.receiveLocalFinderURL(url); continue }
             do {
                 let id = try RequestValidator.dispatchID(from: url)
-                if let controller { controller.receive(id) }
-                else { DispatchQueue.main.async { [weak self] in self?.controller?.receive(id) } }
-            } catch { controller?.model.reportError(error) }
+                controller.receive(id)
+            } catch { controller.model.reportError(error) }
         }
     }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { showSettings(); return true }

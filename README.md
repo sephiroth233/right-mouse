@@ -23,9 +23,9 @@ open .build/native/RightMouse.app
 
 核心检查使用随机临时目录，覆盖命令协议、配置、模板、菜单和文件操作。NSFileCoordinator 需要可访问系统文件协调服务；受限执行环境中的连接失败不能视为文件测试通过。
 
-脚本生成的 ad-hoc 开发版会实际检查共享容器的读写能力。共享容器不可用时，宿主使用 Application Support 下独立的 `RightMouse-Development` 目录，并常驻提示 Finder 菜单暂不可用；可以继续在应用内的文件操作台使用本地功能。正式签名构建与 Finder 扩展不允许此降级。`RIGHTMOUSE_DATA_DIR` 仅供带开发标志的宿主使用，测试工具通过显式临时目录注入存储。
+脚本生成的 ad-hoc 开发版采用本机 Finder 模式，不依赖 App Group。宿主使用 Application Support 下独立的 `RightMouse-Development` 目录；扩展保留沙盒，提供固定的内置菜单，文件操作通过本机链接进入宿主逐次确认。自定义菜单、常用目录与剪切粘贴仍在应用内使用。正式签名版继续使用共享队列，不接受本机链接入口。`RIGHTMOUSE_DATA_DIR` 仅供带开发标志的宿主使用。
 
-启动存储修复的历史验证见 [启动存储记录](Config/validation/development-storage-fallback-2026-09-23.md)；功能检查见[剪切与协议验证](specs/001-finder-core/evidence/EV-clipboard-protocol-001.md)，最新开发包及窗口滚动修复见[界面修复记录](specs/001-finder-core/evidence/EV-liquid-glass-001.md#5-固定窗口与右侧滚动)。
+启动存储修复的历史验证见 [启动存储记录](Config/validation/development-storage-fallback-2026-09-23.md)；功能检查见[剪切与协议验证](specs/001-finder-core/evidence/EV-clipboard-protocol-001.md)，窗口滚动修复见[界面修复记录](specs/001-finder-core/evidence/EV-liquid-glass-001.md#5-固定窗口与右侧滚动)；最新本机 Finder 链路与构建见[本机模式验收](specs/001-finder-core/evidence/EV-local-finder-001.md)。
 
 `scripts/package-app.sh --development` 生成开发 ZIP。完整 Xcode 工程为 `RightMouse.xcodeproj`；新增 Swift 文件后运行 `python3 Config/generate-project.py`。标准 XCTest 和正式签名步骤见 [构建说明](Config/README.md)。
 
@@ -46,14 +46,16 @@ open .build/native/RightMouse.app
 - 复制、移动及撤销提交后再次核对对象；跨卷来源先隔离再验证清理，异常时在恢复页显示保留副本位置。
 - 液态玻璃导航与预览，主窗口默认 960×680 pt，在当前屏幕居中；旧系统与减少透明度模式提供材质降级。
 
-首次使用需在应用中选择使用目录，并在系统扩展设置中确认 Finder 扩展状态。扩展仅对配置目录提供菜单。目录授权来自系统选择器；配置中的路径文字本身不代表授权。
+首次使用需在系统设置中启用 Finder 扩展。本机模式的内置菜单覆盖普通本地目录与挂载卷；共享模式需在应用中选择使用目录，扩展仅对配置目录提供菜单。目录授权来自系统选择器；配置中的路径文字本身不代表授权。
 
 ## 实现结构
 
 ```mermaid
 flowchart LR
     Finder[Finder 菜单] --> Extension[FinderSync 扩展]
-    Extension --> Inbox[共享请求队列]
+    Extension --> Inbox[正式签名：共享请求队列]
+    Extension --> Confirm[本机模式：链接与逐次确认]
+    Confirm --> Host
     Inbox --> Host[原生宿主与调度器]
     Host --> Core[文件操作和模板核心]
     Host --> Ledger[持久任务记录]
@@ -61,13 +63,13 @@ flowchart LR
     Host --> UI[设置与任务界面]
 ```
 
-扩展捕获每次菜单的独立上下文，入队并唤醒宿主；宿主验证请求、授权范围和重复请求，再串行执行文件变更。操作记录不完整时要求核对，不自动重新执行。恢复页中的人工确认只保存核对记录，不删除文件，也不把原来的失败改写为成功。
+共享模式中，扩展捕获每次菜单的独立上下文，入队并唤醒宿主；宿主验证请求、授权范围和重复请求，再串行执行文件变更。操作记录不完整时要求核对，不自动重新执行。恢复页中的人工确认只保存核对记录，不删除文件，也不把原来的失败改写为成功。
 
 ## 当前验证边界
 
-318 项核心夹具检查、389 项宿主侧检查通过，最新宿主回归见[剪切与协议验证](specs/001-finder-core/evidence/EV-clipboard-protocol-001.md)，核心证据见[来源隔离修复](specs/001-finder-core/evidence/EV-source-isolation-001.md)。另有 15 项[真实 APFS 双卷检查](specs/001-finder-core/evidence/EV-real-volume-001.md)通过，包括跨卷复制/移动、元数据、取消保源和真实 ENOSPC。宿主与嵌入扩展已实际编译，开发签名结构验证通过；Finder 登记和进程加载证据见[接入记录](Config/validation/finder-load-2026-09-22.md)。后续系统日志已确认当前 ad-hoc 构建的 App Group 访问被拒绝，路径查找成功不代表共享通信可用。
+341 项核心夹具检查、408 项宿主侧检查通过，最新宿主回归见[剪切与协议验证](specs/001-finder-core/evidence/EV-clipboard-protocol-001.md)，核心证据见[来源隔离修复](specs/001-finder-core/evidence/EV-source-isolation-001.md)。另有 15 项[真实 APFS 双卷检查](specs/001-finder-core/evidence/EV-real-volume-001.md)通过，包括跨卷复制/移动、元数据、取消保源和真实 ENOSPC。宿主与嵌入扩展已实际编译，开发签名结构验证通过；Finder 登记和进程加载证据见[接入记录](Config/validation/finder-load-2026-09-22.md)。此前系统日志确认 ad-hoc 的 App Group 访问被拒绝；最新本机模式已移除该依赖，真实 Finder 菜单 → 宿主确认 → TXT 创建及同名保留、冷启动已取得证据，见[本机模式验收](specs/001-finder-core/evidence/EV-local-finder-001.md)。
 
-尚未完整通过：真实 Finder 菜单到宿主的端到端操作、所有权限撤回场景、外置卷拔出及其他文件系统、最低 macOS 版本、完整键盘与 VoiceOver 验收、Developer ID 签名及公证。当前机器没有有效分发证书，也未安装完整 Xcode。隔离 APFS 镜像通过不等于外置设备故障通过，开发包不等于已公证发行版。
+尚未完整通过：真实 Finder 全部上下文及操作矩阵、所有权限撤回场景、外置卷拔出及其他文件系统、最低 macOS 版本、完整键盘与 VoiceOver 验收、Developer ID 签名及公证。当前机器没有有效分发证书，也未安装完整 Xcode。隔离 APFS 镜像通过不等于外置设备故障通过，开发包不等于已公证发行版。
 
 本轮已接入孤立暂存显式清理、首次创建演练、宿主私有存储分层及损坏日志保全副本；实现状态与剩余验收见[V1 实现差距](specs/001-finder-core/evidence/EV-implementation-gaps-001.md)。保留策略对撤销、旧暂存及不完整证据继续采取保守保留，未将整项系统验收标为完成。
 
@@ -84,6 +86,7 @@ flowchart LR
 
 ## 参考
 
+- [本机 Finder 模式及最新验收](specs/001-finder-core/evidence/EV-local-finder-001.md)
 - [最新剪切与协议验证](specs/001-finder-core/evidence/EV-clipboard-protocol-001.md)
 - [构建与签名配置](Config/README.md)
 - [完整需求规格](specs/001-finder-core/spec.md)

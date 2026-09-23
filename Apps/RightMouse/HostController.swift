@@ -3,6 +3,30 @@ import SwiftUI
 import RightMouseCore
 import Darwin
 
+@MainActor enum LocalFinderConfirmation {
+    static func present(_ request: CommandRequest, details: String) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "确认这次文件操作"
+        alert.informativeText = "本机模式通过链接接收操作，无法验证发送来源。仅在你刚刚选择了对应的右键菜单，并核对下列内容后继续。"
+        alert.addButton(withTitle: "取消")
+        alert.addButton(withTitle: "确认并继续")
+        alert.buttons[0].keyEquivalent = "\r"
+        alert.buttons[1].keyEquivalent = ""
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 520, height: 220))
+        scroll.hasVerticalScroller = true; scroll.borderType = .bezelBorder
+        let text = NSTextView(frame: scroll.bounds)
+        text.isEditable = false; text.isSelectable = true
+        text.isVerticallyResizable = true; text.isHorizontallyResizable = false
+        text.autoresizingMask = [.width]
+        text.textContainer?.widthTracksTextView = true
+        text.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        text.string = details
+        scroll.documentView = text; alert.accessoryView = scroll
+        NSApp.activate(ignoringOtherApps: true)
+        return alert.runModal() == .alertSecondButtonReturn
+    }
+}
+
 @MainActor final class HostController {
     let paths: SharedPaths
     let model: AppModel
@@ -37,12 +61,19 @@ import Darwin
     private let pasteboard: NSPasteboard
     private let pendingMoveNow: () -> Date
     private let moveType = NSPasteboard.PasteboardType("cn.rightmouse.pending-move")
+    private let allowsLocalFinderRequests: Bool
+    private let confirmLocalFinderRequest: @MainActor (CommandRequest, String) -> Bool
+    private var presentingLocalFinderRequest = false
     var showTasks: (() -> Void)?
 
     init(storagePaths: SharedPaths? = nil, conflictPrompt: @escaping ConflictPrompt = ConflictDialog.present,
          projectDirectoryPicker: @escaping ProjectDirectoryPicker = OpenWithInteraction.chooseProjectDirectory,
          openApplication: @escaping ApplicationOpen = { urls, integration in try await ApplicationLauncher.open(urls, with: integration) },
-         pasteboard: NSPasteboard = .general, pendingMoveNow: @escaping () -> Date = Date.init) throws {
+         pasteboard: NSPasteboard = .general, pendingMoveNow: @escaping () -> Date = Date.init,
+         allowsLocalFinderRequests: Bool = Bundle.main.object(forInfoDictionaryKey: "RightMouseLocalFinderMode") as? Bool == true,
+         confirmLocalFinderRequest: @escaping @MainActor (CommandRequest, String) -> Bool = LocalFinderConfirmation.present) throws {
+        self.allowsLocalFinderRequests = allowsLocalFinderRequests
+        self.confirmLocalFinderRequest = confirmLocalFinderRequest
         self.pasteboard = pasteboard; self.pendingMoveNow = pendingMoveNow
         self.conflictPrompt = conflictPrompt
         self.projectDirectoryPicker = projectDirectoryPicker; self.openApplication = openApplication
@@ -66,7 +97,8 @@ import Darwin
         } else { diagnosticRoot = paths.privateRoot }
         diagnostics = DiagnosticLogStore(directory: diagnosticRoot.appendingPathComponent("Diagnostics"))
         model.isDevelopmentStorage = paths.isDevelopmentFallback
-        model.storageDiagnostic = paths.developmentDiagnostic
+        model.isLocalFinderMode = allowsLocalFinderRequests
+        model.storageDiagnostic = allowsLocalFinderRequests ? "本机模式不依赖共享容器。Finder 使用内置菜单；新建、复制、移动与打开方式需在应用中确认。自定义菜单、常用目录与剪切粘贴请在应用内使用。" : paths.developmentDiagnostic
         model.onPerformAction = { [weak self] action, files, target in self?.perform(action, files: files, destination: target) }
         model.onConfigurationChanged = { [weak self] configuration in
             guard let self else { return }
@@ -128,6 +160,51 @@ import Darwin
     func receive(_ id: UUID) {
         do { submit(try inbox.request(id)) }
         catch { model.reportError(error) }
+    }
+    /// External URLs carry no authority. Nothing is accepted by the ledger until
+    /// the user approves the exact bounded request. Modal reentry is rejected.
+    @discardableResult func receiveLocalFinderURL(_ url: URL) -> Bool {
+        guard allowsLocalFinderRequests, !presentingLocalFinderRequest else { return false }
+        presentingLocalFinderRequest = true
+        defer { presentingLocalFinderRequest = false }
+        do {
+            guard !model.isReadOnly else { throw CommandFailure(.unsupportedVersion, "只读状态不能执行 Finder 操作。") }
+            let request = try LocalFinderRequest.decode(url, localModeEnabled: allowsLocalFinderRequests)
+            let details = try localFinderDetails(request)
+            guard confirmLocalFinderRequest(request, details) else { return false }
+            try RequestValidator.validateFresh(request)
+            return submit(request, interactive: true)
+        } catch { model.reportError(error); return false }
+    }
+
+    private func localFinderDetails(_ request: CommandRequest) throws -> String {
+        // JSON string escaping makes embedded newlines/control characters visible.
+        func quoted(_ value: String) -> String {
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.withoutEscapingSlashes]
+            return String(data: (try? encoder.encode(value)) ?? Data(), encoding: .utf8) ?? ""
+        }
+        var lines: [String] = []
+        switch request.action {
+        case let .createFile(templateID, destination, name):
+            guard let template = model.configuration.templates.first(where: { $0.id == templateID }) else { throw CommandFailure(.invalidRequest, "模板不存在") }
+            lines.append("操作：新建文件（\(quoted(template.name))）")
+            lines.append("目标：\(try targetURL(destination, context: request.context).map { quoted($0.path) } ?? "确认后选择目录")")
+            lines.append("名称：\(name.map(quoted) ?? "自动命名，重名时增加序号")")
+        case let .transfer(mode, _, _):
+            lines.append("操作：\(mode == .copy ? "复制到" : "移动到")所选目录")
+            lines.append("目标：确认后使用系统目录选择框选择；同名冲突另行确认。")
+        case let .copyText(format): lines.append("操作：复制文本（\(format.rawValue)），将替换剪贴板内容。")
+        case .stageMove: lines.append("操作：将这些文件加入本次剪切会话，将替换剪贴板内容；此时不移动文件。")
+        case let .openWith(id, mode):
+            guard let app = model.configuration.integrations.first(where: { $0.id == id && $0.enabled }) else { throw CommandFailure(.appUnavailable, "该打开方式未启用") }
+            lines.append("操作：使用 \(quoted(app.name)) 打开\(mode == .directory ? "目录" : "文件")")
+            lines.append("应用：\(quoted(app.applicationPath ?? app.bundleID))")
+        default: throw CommandFailure(.invalidRequest, "本机菜单不支持此操作")
+        }
+        if let container = request.context.container { lines.append("Finder 位置：\(quoted(container.url.path))") }
+        lines.append("选中项目：\(request.context.selection.count) 个")
+        lines.append(contentsOf: request.context.selection.enumerated().map { "\($0.offset + 1). \(quoted($0.element.url.path))" })
+        return lines.joined(separator: "\n")
     }
     @discardableResult func submit(_ request: CommandRequest, interactive: Bool = false) -> Bool {
         do {
@@ -430,7 +507,8 @@ import Darwin
         return FileReference(url: url, kindHint: values?.isSymbolicLink == true ? .symlink : (values?.isDirectory == true ? .directory : .file))
     }
     private func resolveAccess(for request: CommandRequest, interactive: Bool) throws -> [URL] {
-        // Local UI calls originate from a system picker in this process. Finder requests
+        // Interactive calls originate from a system picker or an explicit local URL
+        // confirmation in this process. Shared-queue Finder requests
         // must stay within configured, bookmark-resolved roots; a URL is not a grant.
         var references = request.context.selection.map(\.url)
         if case .pasteMove = request.action, let pending { references.append(contentsOf: pending.files.map(\.url)) }

@@ -65,7 +65,13 @@ public struct SharedPaths: Sendable {
     /// Host startup verifies actual access: macOS can return a group URL even when
     /// it will reject the subsequent write. Only flagged development hosts degrade.
     public static func resolveAndPrepare() throws -> SharedPaths {
-        try resolveAndPrepare(environment: .current,
+        if Bundle.main.object(forInfoDictionaryKey: "RightMouseLocalFinderMode") as? Bool == true,
+           Bundle.main.bundleURL.pathExtension != "appex" {
+            return try resolveAndPrepare(environment: .current,
+                groupContainer: { _ in nil }, applicationSupport: applicationSupportDirectory,
+                prepare: { paths in try paths.prepare(); try paths.verifyWritableStorage() })
+        }
+        return try resolveAndPrepare(environment: .current,
             groupContainer: { FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: $0) },
             applicationSupport: applicationSupportDirectory,
             prepare: { paths in try paths.prepare(); try paths.verifyWritableStorage() })

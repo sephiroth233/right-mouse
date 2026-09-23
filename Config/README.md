@@ -90,3 +90,11 @@ This command **submits the built application to Apple's notarization service**. 
 - An independent copy of a compiled development app was re-signed ad hoc; actual signed entitlements were read through `codesign --xml` and matched the generated entitlements.
 - Stale embedded-profile path fixtures were removed before signing. No fake provisioning profile or certificate was generated.
 - No real signing identity or provisioning profile is available in this environment, so positive certificate/profile matching and signed App Group access remain unverified. No notarization was submitted during these checks.
+
+## 本机 Finder 模式
+
+未配置签名身份时，scripts/build-app.sh 在宿主与扩展同时写入 RightMouseLocalFinderMode=true，并去除 App Group entitlement。宿主仍采用原有非沙盒直接分发拓扑；Finder 扩展保留 App Sandbox。主应用不再探测共享容器，已有开发数据目录保持不变。正式签名构建关闭此入口。
+
+本机固定菜单提供 TXT、Markdown、JSON、Shell 新建、四种文本复制、复制到/移动到与 Terminal/VS Code。URL 请求最多 48 KiB、128 个选中项，禁止书签令牌，所有宿主动作逐次确认后才进入账本。链接并非来源证明；取消为默认。文本复制直接由用户点击的扩展菜单执行。菜单不读取主应用配置，已删除的模板或停用的打开方式会在宿主明确拒绝；不擅自恢复用户配置。
+
+构建后使用 pluginkit -a 登记本项目的 appex，并核对准确包路径。实际菜单、确认、文件与回执的证据见[本机模式验收](../specs/001-finder-core/evidence/EV-local-finder-001.md)。

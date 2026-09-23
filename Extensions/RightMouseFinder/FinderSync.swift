@@ -21,15 +21,39 @@ final class FinderSync: FIFinderSync {
     private var sources: [DispatchSourceFileSystemObject] = []
     private var refreshTimer: DispatchSourceTimer?
     private var configurationError = false
+    private let localMode = Bundle.main.object(forInfoDictionaryKey: "RightMouseLocalFinderMode") as? Bool == true
+    private var invocations: [Int: (value: MenuInvocation, expires: Date)] = [:]
+    private var nextInvocationTag = 1
 
     override init() {
         super.init()
+        if localMode {
+            var defaults = AppConfiguration()
+            defaults.compactMenu = true
+            defaults.actions.removeAll { ["stageMove", "pasteMove", "openFavorite"].contains($0.commandType) }
+            defaults.templates.removeAll { !LocalFinderRequest.allowedTemplateIDs.contains($0.id) }
+            configuration = MenuConfigurationSnapshot(configuration: defaults)
+            refreshLocalScope()
+            for name in [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification] {
+                NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(refreshLocalScope), name: name, object: nil)
+            }
+            logger.notice("Local Finder mode initialized without shared storage")
+            return
+        }
         // Empty until the host has explicitly configured monitored locations.
         FIFinderSyncController.default().directoryURLs = []
         ioQueue.async { [weak self] in self?.initializeStorage() }
     }
 
-    deinit { sources.forEach { $0.cancel() }; refreshTimer?.cancel() }
+    deinit { sources.forEach { $0.cancel() }; refreshTimer?.cancel(); NSWorkspace.shared.notificationCenter.removeObserver(self) }
+
+    @objc private func refreshLocalScope() {
+        // Monitoring affects Finder UI only. It grants no filesystem access.
+        // Include the Data volume explicitly because monitoring does not cross volumes.
+        var roots: Set<URL> = [URL(fileURLWithPath: "/", isDirectory: true), URL(fileURLWithPath: "/Users", isDirectory: true), URL(fileURLWithPath: "/System/Volumes/Data", isDirectory: true)]
+        roots.formUnion(FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: nil, options: [.skipHiddenVolumes]) ?? [])
+        FIFinderSyncController.default().directoryURLs = roots
+    }
 
     private func initializeStorage() {
         do {
@@ -86,6 +110,8 @@ final class FinderSync: FIFinderSync {
     override var toolbarItemImage: NSImage { NSImage(systemSymbolName: "cursorarrow.click.2", accessibilityDescription: "RightMouse") ?? NSImage(size: NSSize(width: 18, height: 18)) }
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu? {
+        invocations = invocations.filter { $0.value.expires > Date() }
+        if invocations.count > 4096 { invocations.removeAll() }
         let start = ContinuousClock.now
         let controller = FIFinderSyncController.default()
         let entryPoint: EntryPoint
@@ -110,7 +136,7 @@ final class FinderSync: FIFinderSync {
             let message = NSMenuItem(title: "RightMouse 配置或共享目录不可用", action: nil, keyEquivalent: "")
             message.isEnabled = false; menu.addItem(message)
         }
-        if paths != nil, !configurationError {
+        if (paths != nil || localMode), !configurationError {
             for entry in MenuPolicy.entries(snapshot: configuration, context: context, pendingMove: pendingMove) { menu.addItem(makeItem(entry, context: context)) }
         }
         if !menu.items.isEmpty { menu.addItem(.separator()) }
@@ -123,8 +149,15 @@ final class FinderSync: FIFinderSync {
 
     private func makeItem(_ entry: MenuEntry, context: ActionContext) -> NSMenuItem {
         let item = NSMenuItem(title: entry.title, action: entry.action == nil ? nil : #selector(dispatch(_:)), keyEquivalent: "")
-        item.isEnabled = entry.enabled; item.target = self
-        if let action = entry.action { item.representedObject = MenuInvocation(context: context, action: action) }
+        item.isEnabled = entry.enabled && (!localMode || context.selection.count <= 128); item.target = self
+        if let action = entry.action {
+            let invocation = MenuInvocation(context: context, action: action)
+            item.representedObject = invocation
+            // Finder serializes menu items across its process boundary. Preserve
+            // context in the extension, using the standard integer tag as the key.
+            item.tag = nextInvocationTag; nextInvocationTag += 1
+            invocations[item.tag] = (invocation, Date().addingTimeInterval(120))
+        }
         if !entry.children.isEmpty {
             let submenu = NSMenu(title: entry.title); submenu.autoenablesItems = false
             entry.children.forEach { submenu.addItem(makeItem($0, context: context)) }; item.submenu = submenu
@@ -133,8 +166,28 @@ final class FinderSync: FIFinderSync {
     }
 
     @objc private func dispatch(_ sender: NSMenuItem) {
-        guard let invocation = sender.representedObject as? MenuInvocation, let paths else { return }
+        logger.notice("Finder menu action received")
+        guard let stored = invocations[sender.tag], stored.expires > Date() else {
+            logger.error("Finder menu invocation expired or missing"); NSSound.beep(); return
+        }
+        let invocation = stored.value
         let request = CommandRequest(context: invocation.context, action: invocation.action, producerInstanceID: producerID)
+        if localMode {
+            do {
+                _ = try RequestValidator.decode(WireCodec.encoder().encode(request))
+                let url = try LocalFinderRequest.encode(request, localModeEnabled: localMode)
+                if case let .copyText(format) = request.action {
+                    let urls = invocation.context.selection.isEmpty ? [invocation.context.container!.url] : invocation.context.selection.map(\.url)
+                    NSPasteboard.general.clearContents()
+                    guard NSPasteboard.general.setString(PathText.format(urls, as: format), forType: .string) else { throw CommandFailure(.ioFailed, "无法写入剪贴板") }
+                } else { openHost(dispatchURL: url) }
+            } catch {
+                logger.error("Local request rejected: \(error.localizedDescription, privacy: .public)")
+                NSSound.beep(); openHost(dispatchURL: nil)
+            }
+            return
+        }
+        guard let paths else { return }
         ioQueue.async { [weak self] in
             do {
                 try InboxStore(directory: paths.inboxDirectory).enqueue(request)
@@ -150,11 +203,17 @@ final class FinderSync: FIFinderSync {
     @objc private func openSettings(_ sender: NSMenuItem) { openHost(dispatchURL: nil) }
 
     private func openHost(dispatchURL: URL?) {
-        let host = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        guard host.pathExtension == "app", Bundle(url: host)?.bundleIdentifier == "cn.rightmouse.RightMouse" else {
-            logger.error("Embedding host identity mismatch"); return
+        let plugins = Bundle.main.bundleURL.deletingLastPathComponent()
+        let contents = plugins.deletingLastPathComponent()
+        let host = contents.deletingLastPathComponent()
+        // The extension sandbox cannot read the enclosing app's Info.plist.
+        // Derive the exact containing app from our own bundle, never URL input;
+        // let Launch Services open it without probing host-private bundle files.
+        guard Bundle.main.bundleIdentifier == "cn.rightmouse.RightMouse.FinderExtension",
+              plugins.lastPathComponent == "PlugIns", contents.lastPathComponent == "Contents", host.pathExtension == "app" else {
+            logger.error("Embedding host layout mismatch"); return
         }
-        let options = NSWorkspace.OpenConfiguration(); options.activates = dispatchURL == nil
+        let options = NSWorkspace.OpenConfiguration(); options.activates = localMode || dispatchURL == nil
         if let dispatchURL {
             NSWorkspace.shared.open([dispatchURL], withApplicationAt: host, configuration: options) { [weak self] _, error in
                 if error != nil { self?.logger.error("Host wake failed; queued request retained") }

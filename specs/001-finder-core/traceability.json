@@ -611,9 +611,10 @@
       "status": "NOT_RUN",
       "evidence": [
         "evidence/EV-core-checks-001.md",
-        "../../Config/validation/finder-load-2026-09-22.md"
+        "../../Config/validation/finder-load-2026-09-22.md",
+        "evidence/EV-local-finder-001.md"
       ],
-      "remaining": "菜单规则已有夹具；真实 Finder 四类上下文及完整投递链路未验收。"
+      "remaining": "本机菜单和 items 新建链路已有真机证据；其余上下文、共享模式及完整配置传播未验收。"
     },
     {
       "id": "AC-002",
@@ -628,9 +629,10 @@
       "status": "NOT_RUN",
       "evidence": [
         "evidence/EV-core-checks-001.md",
-        "evidence/EV-private-storage-recovery-001.md"
+        "evidence/EV-private-storage-recovery-001.md",
+        "evidence/EV-local-finder-001.md"
       ],
-      "remaining": "六模板字节及首次 TXT 演练已有证据；真实 Finder 定位和相应应用读取未验收。"
+      "remaining": "六模板字节已有夹具，本机 Finder TXT 新建与定位有真机证据；其余模板的 Finder 流程和相应应用读取未验收。"
     },
     {
       "id": "AC-004",
@@ -819,9 +821,10 @@
       "evidence": [
         "evidence/EV-core-checks-001.md",
         "evidence/EV-native-build-001.md",
-        "evidence/EV-followup-hardening-001.md"
+        "evidence/EV-followup-hardening-001.md",
+        "evidence/EV-local-finder-001.md"
       ],
-      "remaining": "请求去重、同 ID 冲突和宿主锁已有夹具；真实多实例扩展、宿主冷启动与崩溃后的投递链路未验收。"
+      "remaining": "请求去重已有夹具，本机 Finder 唤醒宿主冷启动已验证；真实多实例扩展、共享队列与崩溃后的完整投递矩阵未验收。"
     },
     {
       "id": "AC-024",
@@ -837,7 +840,8 @@
       "status": "PASS",
       "evidence": [
         "evidence/EV-core-checks-001.md",
-        "evidence/EV-clipboard-protocol-001.md"
+        "evidence/EV-clipboard-protocol-001.md",
+        "evidence/EV-local-finder-001.md"
       ]
     },
     {
@@ -893,7 +897,8 @@
       "status": "NOT_RUN",
       "evidence": [
         "evidence/EV-real-volume-001.md",
-        "evidence/EV-source-isolation-001.md"
+        "evidence/EV-source-isolation-001.md",
+        "evidence/EV-local-finder-001.md"
       ],
       "remaining": "当前 macOS 27 arm64 夹具与 APFS 双卷有证据；macOS 14、外置盘/exFAT、云盘等矩阵仍未测或未承诺。"
     }
