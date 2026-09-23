@@ -53,6 +53,68 @@ func runProtocolChecks() throws -> Int {
     let inbox = InboxStore(directory: fixture.appendingPathComponent("Inbox"))
     try inbox.enqueue(request); try inbox.enqueue(request)
     try check(try inbox.pendingIDs().count == 1, "queue resubmission is idempotent")
+
+    // AC-025 exercises the actual receiver chain rather than treating JSON Schema
+    // validation as execution permission.
+    let semanticRequest = CommandRequest(context: request.context, action: request.action)
+    let canonicalSemantic = try WireCodec.encoder().encode(semanticRequest)
+    let semanticObject = try JSONSerialization.jsonObject(with: canonicalSemantic) as! [String: Any]
+    let reversedMembers = try semanticObject.keys.sorted(by: >).map { key -> String in
+        let encodedValue = try JSONSerialization.data(withJSONObject: semanticObject[key]!, options: [.fragmentsAllowed])
+        return "  \"\(key)\" : \(String(decoding: encodedValue, as: UTF8.self))"
+    }
+    let reorderedWhitespace = Data(("{\n" + reversedMembers.joined(separator: ",\n") + "\n}\n").utf8)
+    try check(reorderedWhitespace != canonicalSemantic, "whitespace and key-order fixture differs from canonical wire bytes")
+    let semanticPath = inbox.directory.appendingPathComponent(semanticRequest.requestID.uuidString + ".json")
+    try PrivateFileIO.write(reorderedWhitespace, to: semanticPath, replace: false)
+    let semanticDecoded = try inbox.request(semanticRequest.requestID)
+    let semanticFirst = try ledger.accept(semanticDecoded)
+    try inbox.enqueue(semanticRequest)
+    let semanticAgain = try ledger.accept(try inbox.request(semanticRequest.requestID))
+    try check(semanticFirst.isNew && !semanticAgain.isNew && semanticFirst.entry.digest == semanticAgain.entry.digest,
+              "InboxStore and ledger deduplicate equal semantics across JSON representation")
+
+    let hostileInbox = InboxStore(directory: fixture.appendingPathComponent("AdversarialInbox"))
+    func storeRaw(_ bytes: Data, id: UUID) throws { try PrivateFileIO.write(bytes, to: hostileInbox.directory.appendingPathComponent(id.uuidString + ".json"), replace: false) }
+    func rejectWithoutLedgerSideEffect(_ name: String, requestID: UUID, bytes: Data, decodedMustReachLedger: Bool = false) throws {
+        try storeRaw(bytes, id: requestID)
+        if decodedMustReachLedger {
+            let candidate = try hostileInbox.request(requestID)
+            try rejects(name) { _ = try ledger.accept(candidate) }
+        } else {
+            try rejects(name) { _ = try hostileInbox.request(requestID) }
+        }
+        try check(try ledger.entry(requestID) == nil, "\(name) has no ledger side effect")
+    }
+    func requestObject(_ value: CommandRequest) throws -> [String: Any] {
+        try JSONSerialization.jsonObject(with: WireCodec.encoder().encode(value)) as! [String: Any]
+    }
+    do {
+        let id = UUID(); var value = semanticRequest; value.requestID = id
+        var raw = try requestObject(value); raw["schemaVersion"] = 999
+        try rejectWithoutLedgerSideEffect("future request version rejected by receiver", requestID: id, bytes: try JSONSerialization.data(withJSONObject: raw))
+    }
+    do {
+        let id = UUID(); var value = semanticRequest; value.requestID = id
+        var raw = try requestObject(value); var context = raw["context"] as! [String: Any]; context["unknownField"] = "ignored?"; raw["context"] = context
+        try rejectWithoutLedgerSideEffect("unknown nested field rejected by receiver", requestID: id, bytes: try JSONSerialization.data(withJSONObject: raw))
+    }
+    do {
+        let id = UUID()
+        try rejectWithoutLedgerSideEffect("malformed JSON rejected by receiver", requestID: id, bytes: Data("{\"schemaVersion\":1,".utf8))
+    }
+    do {
+        let id = UUID()
+        try rejectWithoutLedgerSideEffect("oversized request rejected by receiver", requestID: id, bytes: Data(repeating: 0x20, count: RequestValidator.maximumBytes + 1))
+    }
+    do {
+        let id = UUID(); var value = semanticRequest; value.requestID = id; value.createdAt = Date().addingTimeInterval(-300); value.expiresAt = value.createdAt.addingTimeInterval(120)
+        try rejectWithoutLedgerSideEffect("expired decoded request rejected before ledger acceptance", requestID: id, bytes: WireCodec.encoder().encode(value), decodedMustReachLedger: true)
+    }
+    do {
+        let id = UUID(); var value = semanticRequest; value.requestID = id; value.createdAt = Date().addingTimeInterval(31); value.expiresAt = value.createdAt.addingTimeInterval(120)
+        try rejectWithoutLedgerSideEffect("future decoded request rejected before ledger acceptance", requestID: id, bytes: WireCodec.encoder().encode(value), decodedMustReachLedger: true)
+    }
     let badID = UUID(), link = inbox.directory.appendingPathComponent(badID.uuidString + ".json")
     try FileManager.default.createSymbolicLink(at: link, withDestinationURL: inbox.directory.appendingPathComponent(request.requestID.uuidString + ".json"))
     try rejects("symlink queue file rejected") { _ = try inbox.request(badID) }
