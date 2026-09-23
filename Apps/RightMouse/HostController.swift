@@ -33,12 +33,17 @@ import Darwin
     private var conflictFailures: [UUID: CommandFailure] = [:]
     private var conflictStopNotes: [UUID: String] = [:]
     private var pending: (token: UUID, files: [FileReference], identities: [UUID: String], expires: Date)?
+    private var pendingPasteboardChangeCount: Int?
+    private let pasteboard: NSPasteboard
+    private let pendingMoveNow: () -> Date
     private let moveType = NSPasteboard.PasteboardType("cn.rightmouse.pending-move")
     var showTasks: (() -> Void)?
 
     init(storagePaths: SharedPaths? = nil, conflictPrompt: @escaping ConflictPrompt = ConflictDialog.present,
          projectDirectoryPicker: @escaping ProjectDirectoryPicker = OpenWithInteraction.chooseProjectDirectory,
-         openApplication: @escaping ApplicationOpen = { urls, integration in try await ApplicationLauncher.open(urls, with: integration) }) throws {
+         openApplication: @escaping ApplicationOpen = { urls, integration in try await ApplicationLauncher.open(urls, with: integration) },
+         pasteboard: NSPasteboard = .general, pendingMoveNow: @escaping () -> Date = Date.init) throws {
+        self.pasteboard = pasteboard; self.pendingMoveNow = pendingMoveNow
         self.conflictPrompt = conflictPrompt
         self.projectDirectoryPicker = projectDirectoryPicker; self.openApplication = openApplication
         if let storagePaths { paths = storagePaths; try paths.prepare() }
@@ -199,6 +204,7 @@ import Darwin
         let id = request.requestID
         var scopes: [URL] = []
         var effectStarted = false
+        var stagedMoveToken: UUID?
         defer { for url in scopes { url.stopAccessingSecurityScopedResource() }; cancellations[id] = nil; activeIDs.remove(id); interactiveIDs.remove(id); followupParents[id] = nil }
         do {
             if cancellations[id]?.isCancelled == true { throw CommandFailure(.cancelled, "已取消尚未开始的任务") }
@@ -214,14 +220,18 @@ import Darwin
             switch request.action {
             case let .copyText(format):
                 let urls = request.context.selection.isEmpty ? [try resolveStoredReference(request.context.container!)] : request.context.selection.map(\.url)
-                NSPasteboard.general.clearContents(); NSPasteboard.general.setString(PathText.format(urls, as: format), forType: .string)
-                invalidatePending(); model.notice = "已复制 \(urls.count) 项。"
+                invalidatePending()
+                pasteboard.clearContents()
+                guard pasteboard.setString(PathText.format(urls, as: format), forType: .string) else { throw CommandFailure(.ioFailed, "无法写入剪贴板，请重试。") }
+                model.notice = "已复制 \(urls.count) 项。"
             case .stageMove:
                 var identities: [UUID: String] = [:]
                 for file in request.context.selection { identities[file.refID] = try identity(file.url) }
-                let token = UUID(), expiry = Date().addingTimeInterval(86400)
+                let token = UUID(), expiry = pendingMoveNow().addingTimeInterval(86400)
                 pending = (token, request.context.selection, identities, expiry)
-                try writePending()
+                stagedMoveToken = token
+                do { try writePending(claimPasteboard: true) }
+                catch { invalidatePending(); throw error }
                 model.notice = "已剪切 \(request.context.selection.count) 项，请到目标目录粘贴。"
             case let .createFile(templateID, destination, name):
                 guard let template = model.configuration.templates.first(where: { $0.id == templateID }) else { throw CommandFailure(.invalidRequest, "模板不存在，请刷新菜单") }
@@ -250,7 +260,13 @@ import Darwin
                 if let result = results[id], pending?.token == token {
                     let done = Set(result.items.filter { $0.status == .completed }.map { $0.source.standardizedFileURL.path })
                     pending?.files.removeAll { done.contains($0.url.standardizedFileURL.path) }
-                    if pending?.files.isEmpty == true { invalidatePending() } else { try writePending() }
+                    if pending?.files.isEmpty == true { invalidatePending() }
+                    else {
+                        // File outcomes are already durable. A failed session refresh
+                        // must not replace those outcomes or reclaim another app's clipboard.
+                        do { try writePending() }
+                        catch { invalidatePending(); model.reportError("文件任务结果已保留，但剪切列表更新失败，请重新剪切剩余文件。") }
+                    }
                 }
                 return
             case let .openFavorite(favoriteID):
@@ -282,6 +298,10 @@ import Darwin
                 model.updateTask(TaskPresentation(id: id, title: title(request.action), status: "完成", completed: max(1, items.count), total: max(1, items.count), items: items.map { TaskItemPresentation(name: $0.destinationURL?.lastPathComponent ?? "完成", status: "成功", destination: $0.destinationURL) }))
             }
         } catch {
+            // A cut is usable only after its command outcome is recorded as well
+            // as its clipboard snapshot. Failed admission/publication cannot leave
+            // a hidden live session behind a failed or uncertain task.
+            if let stagedMoveToken, pending?.token == stagedMoveToken { invalidatePending() }
             let failure = (error as? CommandFailure) ?? CommandFailure(.ioFailed, error.localizedDescription)
             var status: ReceiptStatus = effectStarted ? .needsReview : (failure.code == .cancelled ? .cancelled : .failed)
             do { try update(id, status: status, error: failure) }
@@ -338,7 +358,7 @@ import Darwin
             if pending?.files.isEmpty == true { invalidatePending() }
             else {
                 do { try writePending() }
-                catch { model.notice = "重试结果已保留，但剪切列表快照未更新；请重新剪切剩余项目。" }
+                catch { invalidatePending(); model.notice = "重试结果已保留，但剪切列表快照未更新；请重新剪切剩余项目。" }
             }
         }
         let itemReceipts = result.items.map { item in
@@ -490,16 +510,25 @@ import Darwin
         return "\(info.st_dev):\(info.st_ino):\(info.st_mode & S_IFMT)"
     }
     private func validPending() -> (token: UUID, files: [FileReference], identities: [UUID: String], expires: Date)? {
-        guard let pending, pending.expires > Date(), NSPasteboard.general.string(forType: moveType) == pending.token.uuidString else { invalidatePending(); return nil }
+        guard let pending, pending.expires > pendingMoveNow(), pasteboard.changeCount == pendingPasteboardChangeCount,
+              pasteboard.string(forType: moveType) == pending.token.uuidString else { invalidatePending(); return nil }
         return pending
     }
-    private func writePending() throws {
-        guard let pending else { return }
-        NSPasteboard.general.clearContents(); NSPasteboard.general.setString(pending.token.uuidString, forType: moveType)
+    private func writePending(claimPasteboard: Bool = false) throws {
+        if claimPasteboard {
+            guard let pending else { return }
+            pasteboard.clearContents()
+            guard pasteboard.setString(pending.token.uuidString, forType: moveType) else { throw CommandFailure(.ioFailed, "无法写入剪切标记，请重试。") }
+            pendingPasteboardChangeCount = pasteboard.changeCount
+        }
+        guard let pending = validPending() else {
+            if claimPasteboard { throw CommandFailure(.ioFailed, "剪贴板已改变，请重新剪切。") }
+            return
+        }
         try PrivateFileIO.write(WireCodec.encoder().encode(PendingMoveSnapshot(token: pending.token, count: pending.files.count, expiresAt: pending.expires)), to: paths.pendingMoveURL)
         DistributedNotificationCenter.default().postNotificationName(Notification.Name("cn.rightmouse.pendingMoveChanged"), object: nil, deliverImmediately: true)
     }
-    private func invalidatePending() { pending = nil; try? FileManager.default.removeItem(at: paths.pendingMoveURL) }
+    private func invalidatePending() { pending = nil; pendingPasteboardChangeCount = nil; try? FileManager.default.removeItem(at: paths.pendingMoveURL) }
     private func publish(_ receipt: CommandReceipt) throws {
         model.receiveSetupReceipt(receipt)
         try PrivateFileIO.write(WireCodec.encoder().encode(receipt), to: paths.receiptsDirectory.appendingPathComponent(receipt.requestID.uuidString + ".json"))
