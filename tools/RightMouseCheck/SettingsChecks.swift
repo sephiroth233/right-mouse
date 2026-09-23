@@ -23,10 +23,17 @@ func runSettingsChecks() throws -> Int {
     let store = ConfigurationStore(directory: root.appendingPathComponent("config"))
     var configuration = try store.load()
     try verify(configuration.templates.count == 6, "Expected six built-in templates")
+    try verify(configuration.showMenuBarIcon, "Menu-bar icon should default to visible")
+    var legacy = try JSONSerialization.jsonObject(with: WireCodec.encoder().encode(configuration)) as! [String: Any]
+    legacy.removeValue(forKey: "showMenuBarIcon")
+    let migrated = try WireCodec.decoder().decode(AppConfiguration.self, from: JSONSerialization.data(withJSONObject: legacy))
+    try verify(migrated.showMenuBarIcon && migrated == configuration, "Old configuration did not preserve settings/default visible icon")
+    configuration.showMenuBarIcon = false
     configuration.compactMenu = true
     configuration = try store.save(configuration)
     try verify(configuration.revision == 1 && configuration.compactMenu, "Configuration revision/change not saved")
     try verify(try store.load() == configuration, "Configuration round-trip differs")
+    try verify(try !store.load().showMenuBarIcon, "Hidden menu-bar icon choice did not survive reload")
     try verify(try store.save(AppConfiguration()).revision == 2, "Revision did not advance beyond stored value")
     let mode = try FileManager.default.attributesOfItem(atPath: store.fileURL.path)[.posixPermissions] as? NSNumber
     try verify(mode?.intValue == 0o600, "Configuration file permissions are not private")

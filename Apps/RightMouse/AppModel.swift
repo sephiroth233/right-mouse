@@ -409,6 +409,7 @@ enum SetupExercisePhase: Equatable {
         onPerformAction(action, selectedFiles, destination)
     }
     func setLaunchAtLogin(_ enabled: Bool) {
+        guard !isReadOnly else { reportError("当前配置为只读，无法更改登录启动设置。"); return }
         do {
             if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
             save { $0.launchAtLogin = enabled }

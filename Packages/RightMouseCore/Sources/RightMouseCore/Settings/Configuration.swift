@@ -54,6 +54,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
     public var topLevelEntryIDs: [String] = []
     public var hiddenEntryIDs: [String] = []
     public var launchAtLogin = false
+    public var showMenuBarIcon = true
     public var revealCreatedFile = true
     public var conflictPolicy = "ask"
     public var actions: [ConfiguredAction]
@@ -79,7 +80,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         templates = FileTemplate.builtIns
     }
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, revision, compactMenu, topLevelEntryIDs, hiddenEntryIDs, launchAtLogin, revealCreatedFile, conflictPolicy
+        case schemaVersion, revision, compactMenu, topLevelEntryIDs, hiddenEntryIDs, launchAtLogin, showMenuBarIcon, revealCreatedFile, conflictPolicy
         case actions, favorites, watchedLocations, recentDestinations, integrations, templates
     }
     public init(from decoder: Decoder) throws {
@@ -90,6 +91,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         topLevelEntryIDs = try values.decodeIfPresent([String].self, forKey: .topLevelEntryIDs) ?? []
         hiddenEntryIDs = try values.decodeIfPresent([String].self, forKey: .hiddenEntryIDs) ?? []
         launchAtLogin = try values.decode(Bool.self, forKey: .launchAtLogin)
+        showMenuBarIcon = try values.decodeIfPresent(Bool.self, forKey: .showMenuBarIcon) ?? true
         revealCreatedFile = try values.decode(Bool.self, forKey: .revealCreatedFile)
         conflictPolicy = try values.decode(String.self, forKey: .conflictPolicy)
         actions = try values.decode([ConfiguredAction].self, forKey: .actions)

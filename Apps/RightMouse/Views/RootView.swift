@@ -127,8 +127,13 @@ private struct GeneralSettingsView: View {
                     }
                 }
             }
-            Section("偏好设置") {
+            Section("启动与后台运行") {
                 Toggle("登录时启动 RightMouse", isOn: Binding(get: { model.configuration.launchAtLogin }, set: model.setLaunchAtLogin))
+                Text("登录后静默运行，不打开设置窗口。").font(.caption).foregroundStyle(.secondary)
+                Toggle("在菜单栏显示图标", isOn: model.binding(\.showMenuBarIcon))
+                Text("关闭窗口后，Dock 图标会隐藏，Finder 右键功能继续运行。即使隐藏菜单栏图标，也可以通过 Spotlight、应用程序或 Finder 的 RightMouse 设置入口重新打开。").font(.caption).foregroundStyle(.secondary)
+            }.disabled(model.isReadOnly)
+            Section("偏好设置") {
                 Toggle("新建文件后在 Finder 中定位", isOn: model.binding(\.revealCreatedFile))
                 Toggle("将未置顶的操作收进 RightMouse 子菜单", isOn: model.binding(\.compactMenu))
             }.disabled(model.isReadOnly)

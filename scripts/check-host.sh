@@ -17,6 +17,7 @@ xcrun swiftc "${common[@]}" \
   -I "$build_dir/modules" -L "$build_dir" -lRightMouseCore \
   Apps/RightMouse/AppModel.swift \
   Apps/RightMouse/ApplicationLauncher.swift \
+  Apps/RightMouse/ApplicationLaunchPolicy.swift \
   Apps/RightMouse/OpenWithPlanning.swift \
   Apps/RightMouse/OpenWithInteraction.swift \
   Apps/RightMouse/ConflictDialog.swift \
