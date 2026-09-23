@@ -29,6 +29,15 @@ GitHub Actions 复用本机预览版脚本，检查代码并分别生成 Apple S
 
 2026-09-23 本地验证：actionlint 1.7.12（含 ShellCheck）通过，所有构建步骤的 Bash 语法检查通过，SDD 校验通过；直接提取工作流的包验证步骤，对现有 arm64 应用与 DMG 执行签名、三个组件架构、镜像和散列检查均通过。故意设置错误架构时按预期返回失败，`tee` 不会掩盖失败状态。Intel 和托管 runner 的执行结果尚未取得，未触发任何远程运行。
 
+## 首次远程运行与修复
+
+[首次运行](https://github.com/sephiroth233/right-mouse/actions/runs/35820321920)发现两个独立问题：
+
+- arm64 的编译、核心和宿主检查通过，但 `codesign` 报 `no identity found`。临时钥匙串仅传给 `--keychain`，未加入用户搜索列表；该选项不会替代证书链解析时使用的搜索列表。脚本现临时加入钥匙串、检查证书与私钥身份匹配，结束时恢复原列表并删除临时材料，不增加根证书信任。
+- Intel 核心检查报 `Failed to retrieve app-scope key`。Intel 链接得到的命令行测试程序没有自动签名，书签测试缺少代码身份。在本机以 Rosetta 运行同一 Intel 最小程序，未签名失败、ad-hoc 签名后成功；核心与宿主检查脚本现均显式签名并验证测试程序，未跳过书签测试或改动文件访问规则。
+
+修复提交 `f3b1bd4` 的[第二次运行](https://github.com/sephiroth233/right-mouse/actions/runs/35820867854)已全部通过：文档检查，以及两个架构各自的 384 项核心、472 项宿主检查、应用编译签名、DMG 打包、架构/签名/镜像/散列验证。产物为 `RightMouse-local-arm64-2` 与 `RightMouse-local-x86_64-2`，另有对应构建日志。以上取代上一节“尚未取得托管执行结果”的初始记录；Finder UI 和首次安装仍需单独验收。
+
 ## 参考
 
 - [GitHub 托管 runner 与架构](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
