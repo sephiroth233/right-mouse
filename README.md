@@ -36,6 +36,10 @@ scripts/package-local-app.sh --no-build
 
 生成的 DMG 位于 `dist/`。构建会为本机组件生成签名身份，无需开发者账号；生成的安装包仍属于未公证版本。
 
+## 自动构建
+
+GitHub Actions 已配置为在推送到 `main`、提交 PR 或手动触发时运行检查，分别构建 Apple Silicon 和 Intel DMG。工作流推送并运行成功后，可在 **Actions → Build macOS DMG → 对应运行 → Artifacts** 下载安装包及 SHA-256 校验文件。详见 [自动构建说明](docs/ci.md)。
+
 ## 开发文档
 
 - [构建与签名配置](Config/README.md)

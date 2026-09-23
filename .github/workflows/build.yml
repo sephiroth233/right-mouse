@@ -1,0 +1,129 @@
+name: Build macOS DMG
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  documents:
+    name: Validate specifications
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.12'
+      - name: Install validation dependencies
+        run: python -m pip install -r tools/requirements-docs.txt
+      - name: Validate SDD documents and schemas
+        run: python scripts/validate_sdd.py
+
+  build:
+    name: Build ${{ matrix.arch }} DMG
+    needs: documents
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            arch: arm64
+          - runner: macos-26-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      RIGHTMOUSE_ARCH: ${{ matrix.arch }}
+      RIGHTMOUSE_BUILD_DIR: ${{ github.workspace }}/.build/ci-local
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check build environment
+        run: |
+          CI_LOG_DIR="$RUNNER_TEMP/rightmouse-logs"
+          printf 'CI_LOG_DIR=%s\n' "$CI_LOG_DIR" >> "$GITHUB_ENV"
+          mkdir -p "$CI_LOG_DIR"
+          {
+            sw_vers
+            uname -m
+            xcodebuild -version
+            xcrun swiftc --version
+            xcrun --sdk macosx --show-sdk-version
+            test "$(uname -m)" = "$RIGHTMOUSE_ARCH"
+            sdk_version=$(xcrun --sdk macosx --show-sdk-version)
+            test "${sdk_version%%.*}" -ge 26
+          } 2>&1 | tee "$CI_LOG_DIR/environment.log"
+      - name: Run core checks
+        run: scripts/check-core.sh 2>&1 | tee "$CI_LOG_DIR/core.log"
+      - name: Run host checks
+        run: scripts/check-host.sh 2>&1 | tee "$CI_LOG_DIR/host.log"
+      - name: Build and sign local app
+        run: python3 scripts/build-local-app.py 2>&1 | tee "$CI_LOG_DIR/build.log"
+      - name: Package DMG
+        run: scripts/package-local-app.sh --no-build 2>&1 | tee "$CI_LOG_DIR/package.log"
+      - name: Verify package and record build information
+        run: |
+          {
+            app="$RIGHTMOUSE_BUILD_DIR/RightMouse.app"
+            codesign --verify --deep --strict "$app"
+            for executable in \
+              "$app/Contents/MacOS/RightMouse" \
+              "$app/Contents/PlugIns/RightMouseFinder.appex/Contents/MacOS/RightMouseFinder" \
+              "$app/Contents/Library/LaunchServices/RightMouseBridge.app/Contents/MacOS/RightMouseBridge"; do
+              test "$(lipo -archs "$executable")" = "$RIGHTMOUSE_ARCH"
+            done
+            for dmg in dist/*.dmg; do hdiutil verify "$dmg"; done
+            (cd dist && shasum -a 256 -c ./*.sha256)
+            python3 - <<'PY'
+          import json, os, pathlib, plistlib, subprocess
+          app = pathlib.Path(os.environ['RIGHTMOUSE_BUILD_DIR']) / 'RightMouse.app'
+          info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
+          metadata = {
+              'version': info['CFBundleShortVersionString'],
+              'commit': os.environ['GITHUB_SHA'],
+              'architecture': os.environ['RIGHTMOUSE_ARCH'],
+              'macos': subprocess.check_output(['sw_vers', '-productVersion'], text=True).strip(),
+              'sdk': subprocess.check_output(['xcrun', '--sdk', 'macosx', '--show-sdk-version'], text=True).strip(),
+              'buildCertificate': info['RightMouseLocalCertificate'],
+              'notarized': False,
+              'run': f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+          }
+          pathlib.Path('dist/build-info.json').write_text(json.dumps(metadata, indent=2) + '\n')
+          PY
+          } 2>&1 | tee "$CI_LOG_DIR/verification.log"
+      - name: Upload installer
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: RightMouse-local-${{ matrix.arch }}-${{ github.run_number }}
+          path: |
+            dist/*.dmg
+            dist/*.sha256
+            dist/build-info.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-logs-${{ matrix.arch }}-${{ github.run_number }}
+          path: ${{ runner.temp }}/rightmouse-logs/*.log
+          if-no-files-found: warn
+          retention-days: 7

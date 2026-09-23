@@ -27,6 +27,8 @@ GitHub Actions 复用本机预览版脚本，检查代码并分别生成 Apple S
 
 本地可以检查 YAML、表达式、脚本与文档，并验证已有构建脚本。GitHub 托管 runner 的首次完整运行，需要工作流推送后验证。CI 不注册 Finder 扩展、不启动用户级连接服务，不把自动检查通过等同于真实 Finder、首次安装或最低系统版本验收。
 
+2026-09-23 本地验证：actionlint 1.7.12（含 ShellCheck）通过，所有构建步骤的 Bash 语法检查通过，SDD 校验通过；直接提取工作流的包验证步骤，对现有 arm64 应用与 DMG 执行签名、三个组件架构、镜像和散列检查均通过。故意设置错误架构时按预期返回失败，`tee` 不会掩盖失败状态。Intel 和托管 runner 的执行结果尚未取得，未触发任何远程运行。
+
 ## 参考
 
 - [GitHub 托管 runner 与架构](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
