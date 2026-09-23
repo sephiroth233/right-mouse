@@ -23,20 +23,20 @@ struct FileToolsView: View {
                 GroupBox("操作") {
                     VStack(alignment: .leading, spacing: 16) {
                         HStack(spacing: 12) {
-                            Menu("新建文件") { ForEach(model.configuration.templates) { template in Button(template.name) { model.perform("createFile:\(template.id)") } } }.disabled(model.destination == nil)
-                            Menu("复制文本") {
-                                Button("完整路径") { model.perform("copyText:path") }
-                                Button("文件名") { model.perform("copyText:name") }.disabled(model.selectedFiles.isEmpty)
-                                Button("不含扩展名") { model.perform("copyText:stem") }.disabled(model.selectedFiles.isEmpty)
-                                Button("终端转义路径") { model.perform("copyText:shellPath") }
-                            }.disabled(model.selectedFiles.isEmpty && model.destination == nil)
-                            Menu("打开方式") { ForEach(model.configuration.integrations.filter(\.enabled)) { app in Button(app.name) { model.perform("openWith:\(app.id)") } } }.disabled(model.selectedFiles.isEmpty && model.destination == nil)
+                            Menu { ForEach(model.configuration.templates) { template in Button { model.perform("createFile:\(template.id)") } label: { Label(template.name, systemImage: MenuIcon.template(template.id)) } } } label: { Label("新建文件", systemImage: "doc.badge.plus") }.disabled(model.destination == nil)
+                            Menu {
+                                Button("完整路径", systemImage: "link") { model.perform("copyText:path") }
+                                Button("文件名", systemImage: "textformat") { model.perform("copyText:name") }.disabled(model.selectedFiles.isEmpty)
+                                Button("不含扩展名", systemImage: "textformat.abc") { model.perform("copyText:stem") }.disabled(model.selectedFiles.isEmpty)
+                                Button("终端转义路径", systemImage: "terminal") { model.perform("copyText:shellPath") }
+                            } label: { Label("复制文本", systemImage: "doc.on.clipboard") }.disabled(model.selectedFiles.isEmpty && model.destination == nil)
+                            Menu { ForEach(model.configuration.integrations.filter(\.enabled)) { app in Button { model.perform("openWith:\(app.id)") } label: { Label { Text(app.name) } icon: { ApplicationIcon(integration: app, size: 16) } } } } label: { Label("打开方式", systemImage: "square.grid.2x2") }.disabled(model.selectedFiles.isEmpty && model.destination == nil)
                         }
-                        HStack(spacing: 12) {
-                            Button("剪切所选文件") { model.perform("stageMove") }.disabled(model.selectedFiles.isEmpty)
-                            Button("粘贴待移动文件") { model.perform("pasteMove") }.disabled(model.destination == nil)
-                            Button("复制到目标") { model.perform("copyTo") }.disabled(model.selectedFiles.isEmpty || model.destination == nil)
-                            Button("移动到目标") { model.perform("moveTo") }.disabled(model.selectedFiles.isEmpty || model.destination == nil)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), alignment: .leading)], alignment: .leading, spacing: 10) {
+                            Button("剪切所选文件", systemImage: "scissors") { model.perform("stageMove") }.disabled(model.selectedFiles.isEmpty)
+                            Button("粘贴待移动文件", systemImage: "clipboard") { model.perform("pasteMove") }.disabled(model.destination == nil)
+                            Button("复制到目标", systemImage: "doc.on.doc") { model.perform("copyTo") }.disabled(model.selectedFiles.isEmpty || model.destination == nil)
+                            Button("移动到目标", systemImage: "arrow.right.doc.on.clipboard") { model.perform("moveTo") }.disabled(model.selectedFiles.isEmpty || model.destination == nil)
                         }
                         Text("操作结果会出现在“任务记录”。处理同名文件时按“文件操作”中的策略询问、跳过或保留两份。").font(.caption).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(8)

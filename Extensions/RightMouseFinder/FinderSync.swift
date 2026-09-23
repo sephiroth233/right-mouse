@@ -24,9 +24,23 @@ final class FinderSync: FIFinderSync {
     private let localMode = Bundle.main.object(forInfoDictionaryKey: "RightMouseLocalFinderMode") as? Bool == true
     private var invocations: [Int: (value: MenuInvocation, expires: Date)] = [:]
     private var nextInvocationTag = 1
+    private var applicationIcons: [String: NSImage] = [:]
+    private let brandIcon = Bundle.main.url(forResource: "AppIcon", withExtension: "icns").flatMap(NSImage.init(contentsOf:))
 
     override init() {
         super.init()
+        // Resolve installed application artwork once, away from menu callbacks.
+        ioQueue.async { [weak self] in
+            var icons: [String: NSImage] = [:]
+            for (id, bundleID) in [("terminal", "com.apple.Terminal"), ("vscode", "com.microsoft.VSCode")] {
+                if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+                    let icon = NSWorkspace.shared.icon(forFile: url.path)
+                    icon.size = NSSize(width: 16, height: 16); icons[id] = icon
+                }
+            }
+            let loaded = icons
+            DispatchQueue.main.async { self?.applicationIcons = loaded }
+        }
         if localMode {
             var defaults = AppConfiguration()
             defaults.compactMenu = true
@@ -141,6 +155,7 @@ final class FinderSync: FIFinderSync {
         }
         if !menu.items.isEmpty { menu.addItem(.separator()) }
         let settings = NSMenuItem(title: "RightMouse 设置…", action: #selector(openSettings(_:)), keyEquivalent: "")
+        settings.image = symbol("gearshape")
         settings.target = self; menu.addItem(settings)
         let elapsed = start.duration(to: .now)
         logger.debug("Built menu in \(String(describing: elapsed), privacy: .public)")
@@ -149,6 +164,10 @@ final class FinderSync: FIFinderSync {
 
     private func makeItem(_ entry: MenuEntry, context: ActionContext) -> NSMenuItem {
         let item = NSMenuItem(title: entry.title, action: entry.action == nil ? nil : #selector(dispatch(_:)), keyEquivalent: "")
+        if entry.id == "rightmouse", let brand = brandIcon?.copy() as? NSImage {
+            brand.size = NSSize(width: 18, height: 18); item.image = brand
+        } else if case let .openWith(id, _) = entry.action, let icon = applicationIcons[id] { item.image = icon }
+        else { item.image = symbol(MenuIcon.symbol(for: entry)) }
         item.isEnabled = entry.enabled && (!localMode || context.selection.count <= 128); item.target = self
         if let action = entry.action {
             let invocation = MenuInvocation(context: context, action: action)
@@ -163,6 +182,12 @@ final class FinderSync: FIFinderSync {
             entry.children.forEach { submenu.addItem(makeItem($0, context: context)) }; item.submenu = submenu
         }
         return item
+    }
+
+    private func symbol(_ name: String) -> NSImage? {
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
+        image?.size = NSSize(width: 16, height: 16); image?.isTemplate = true
+        return image
     }
 
     @objc private func dispatch(_ sender: NSMenuItem) {

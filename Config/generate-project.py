@@ -16,6 +16,7 @@ def file_ref(path, kind='sourcecode.swift'):
     return obj('file:'+path, f'isa = PBXFileReference; lastKnownFileType = {kind}; path = {q(path)}; sourceTree = SOURCE_ROOT;')
 
 base = file_ref('Config/Base.xcconfig', 'text.xcconfig')
+icon_file = file_ref('Resources/AppIcon.icns', 'image.icns')
 app_files = [file_ref(str(p.relative_to(ROOT))) for p in sorted((ROOT/'Apps/RightMouse').rglob('*.swift'))]
 ext_files = [file_ref(str(p.relative_to(ROOT))) for p in sorted((ROOT/'Extensions/RightMouseFinder').rglob('*.swift'))]
 test_files = [file_ref(str(p.relative_to(ROOT))) for p in sorted((ROOT/'Packages/RightMouseCore/Tests/RightMouseCoreTests').rglob('*.swift'))]
@@ -26,7 +27,7 @@ products = obj('products', f'isa = PBXGroup; children = {ids([app_product, ext_p
 app_group = obj('group:app', f'isa = PBXGroup; children = {ids(app_files)}; name = RightMouse; sourceTree = "<group>";')
 ext_group = obj('group:extension', f'isa = PBXGroup; children = {ids(ext_files)}; name = RightMouseFinder; sourceTree = "<group>";')
 test_group = obj('group:tests', f'isa = PBXGroup; children = {ids(test_files)}; name = RightMouseCoreTests; sourceTree = "<group>";')
-main_group = obj('main', f'isa = PBXGroup; children = {ids([app_group, ext_group, test_group, base, products])}; sourceTree = "<group>";')
+main_group = obj('main', f'isa = PBXGroup; children = {ids([app_group, ext_group, test_group, base, icon_file, products])}; sourceTree = "<group>";')
 package = obj('package', 'isa = XCLocalSwiftPackageReference; relativePath = .;')
 
 def configs(name, settings):
@@ -53,6 +54,11 @@ def framework_phase(name):
     build=obj('link:'+name, f'isa = PBXBuildFile; productRef = {dep};')
     phase=obj('frameworks:'+name, f'isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = {ids([build])}; runOnlyForDeploymentPostprocessing = 0;')
     return dep, phase
+def resource_phase(name):
+    icon_build = obj('icon:'+name, f'isa = PBXBuildFile; fileRef = {icon_file};')
+    return obj('resources:'+name, f'isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = {ids([icon_build])}; runOnlyForDeploymentPostprocessing = 0;')
+app_resources = resource_phase('app')
+ext_resources = resource_phase('extension')
 app_core,app_frameworks=framework_phase('app')
 ext_core,ext_frameworks=framework_phase('extension')
 test_core,test_frameworks=framework_phase('tests')
@@ -62,10 +68,10 @@ app_sources=source_phase('app',app_files)
 ext_sources=source_phase('extension',ext_files)
 embedded=obj('embed:file', f'isa = PBXBuildFile; fileRef = {ext_product}; settings = {{ATTRIBUTES = (RemoveHeadersOnCopy,);}};')
 embed=obj('embed:phase', f'isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = {ids([embedded])}; name = "Embed App Extensions"; runOnlyForDeploymentPostprocessing = 0;')
-ext_target=obj('target:extension', f'isa = PBXNativeTarget; buildConfigurationList = {ext_configs}; buildPhases = {ids([ext_sources,ext_frameworks])}; buildRules = (); dependencies = (); name = RightMouseFinder; packageProductDependencies = {ids([ext_core])}; productName = RightMouseFinder; productReference = {ext_product}; productType = "com.apple.product-type.app-extension";')
+ext_target=obj('target:extension', f'isa = PBXNativeTarget; buildConfigurationList = {ext_configs}; buildPhases = {ids([ext_sources,ext_frameworks,ext_resources])}; buildRules = (); dependencies = (); name = RightMouseFinder; packageProductDependencies = {ids([ext_core])}; productName = RightMouseFinder; productReference = {ext_product}; productType = "com.apple.product-type.app-extension";')
 proxy=obj('proxy', f'isa = PBXContainerItemProxy; containerPortal = {uid("project")}; proxyType = 1; remoteGlobalIDString = {ext_target}; remoteInfo = RightMouseFinder;')
 dep=obj('dependency', f'isa = PBXTargetDependency; target = {ext_target}; targetProxy = {proxy};')
-app_target=obj('target:app', f'isa = PBXNativeTarget; buildConfigurationList = {app_configs}; buildPhases = {ids([app_sources,app_frameworks,embed])}; buildRules = (); dependencies = {ids([dep])}; name = RightMouse; packageProductDependencies = {ids([app_core])}; productName = RightMouse; productReference = {app_product}; productType = "com.apple.product-type.application";')
+app_target=obj('target:app', f'isa = PBXNativeTarget; buildConfigurationList = {app_configs}; buildPhases = {ids([app_sources,app_frameworks,app_resources,embed])}; buildRules = (); dependencies = {ids([dep])}; name = RightMouse; packageProductDependencies = {ids([app_core])}; productName = RightMouse; productReference = {app_product}; productType = "com.apple.product-type.application";')
 project=obj('project', f'isa = PBXProject; attributes = {{BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 1600;}}; buildConfigurationList = {project_configs}; compatibilityVersion = "Xcode 14.0"; developmentRegion = zh_CN; hasScannedForEncodings = 0; knownRegions = (en, zh_CN, Base); mainGroup = {main_group}; packageReferences = {ids([package])}; productRefGroup = {products}; projectDirPath = ""; projectRoot = ""; targets = {ids([app_target,ext_target,test_target])};')
 (ROOT/'RightMouse.xcodeproj/project.pbxproj').write_text('// !$*UTF8*$!\n{\narchiveVersion = 1;\nclasses = {};\nobjectVersion = 56;\nobjects = {\n'+'\n'.join(f'{key} = {value}' for key,value in objects.items())+f'\n}};\nrootObject = {project};\n}}\n')
 (ROOT/'RightMouse.xcodeproj/xcshareddata/xcschemes/RightMouse.xcscheme').write_text(f'''<?xml version="1.0" encoding="UTF-8"?>

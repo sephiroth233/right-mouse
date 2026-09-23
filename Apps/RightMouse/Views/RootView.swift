@@ -47,7 +47,9 @@ struct RootView: View {
         HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 10) {
-                    Image(systemName: "cursorarrow.click.2").font(.title).foregroundStyle(.blue)
+                    if let icon = AppIcons.brand {
+                        Image(nsImage: icon).resizable().aspectRatio(contentMode: .fit).frame(width: 38, height: 38).accessibilityHidden(true)
+                    } else { Image(systemName: "cursorarrow.click.2").font(.title).foregroundStyle(.blue).accessibilityHidden(true) }
                     VStack(alignment: .leading) { Text("RightMouse").font(.headline); Text("Finder 效率工具").font(.caption).foregroundStyle(.secondary) }
                 }.padding(.horizontal, 18).padding(.top, 24)
                 ScrollView {

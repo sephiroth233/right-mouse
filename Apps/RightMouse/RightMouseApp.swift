@@ -33,6 +33,7 @@ enum RightMouseApplication {
         application(NSApplication.shared, open: [url])
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if let icon = AppIcons.brand { NSApp.applicationIconImage = icon }
         installMenu()
         do {
             controller = try HostController()

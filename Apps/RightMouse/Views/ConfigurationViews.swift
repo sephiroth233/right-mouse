@@ -19,6 +19,7 @@ struct MenuSettingsView: View {
                     ForEach(Array(model.configuration.actions.enumerated()), id: \.element.id) { index, action in
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
+                                Image(systemName: MenuIcon.command(action.commandType)).frame(width: 20).foregroundStyle(.secondary).accessibilityHidden(true)
                                 Toggle(action.title, isOn: Binding(get: { action.enabled }, set: { enabled in model.save { $0.actions[index].enabled = enabled } }))
                                 Spacer()
                                 MoveControls(index: index, count: model.configuration.actions.count) { offset in move(index, offset) }
@@ -35,7 +36,7 @@ struct MenuSettingsView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 6) {
                         if preview.isEmpty { Text("没有可见操作").foregroundStyle(.secondary) }
-                        ForEach(preview) { entry in MenuPreviewRow(entry: entry) }
+                        ForEach(preview) { entry in MenuPreviewRow(entry: entry, integrations: model.configuration.integrations) }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
                 }.rightMouseGlass(radius: 16)
                 Text("与 Finder 共用菜单规则；没有待移动文件时不显示粘贴。系统菜单中的最终位置由 Finder 决定。").font(.caption).foregroundStyle(.secondary)
@@ -50,15 +51,16 @@ struct MenuSettingsView: View {
 
 private struct MenuPreviewRow: View {
     let entry: MenuEntry
+    let integrations: [AppIntegration]
     var depth: Int = 0
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            HStack { Text(entry.title); Spacer(); if !entry.children.isEmpty { Image(systemName: "chevron.right").font(.caption2) } }
+            HStack(spacing: 7) { MenuEntryIcon(entry: entry, integrations: integrations); Text(entry.title); Spacer(); if !entry.children.isEmpty { Image(systemName: "chevron.right").font(.caption2) } }
                 .foregroundStyle(entry.enabled ? .primary : .secondary)
                 .font(depth == 0 ? .body : .caption)
             if !entry.children.isEmpty {
                 ForEach(entry.children) { child in
-                    AnyView(MenuPreviewRow(entry: child, depth: depth + 1)).padding(.leading, 12)
+                    AnyView(MenuPreviewRow(entry: child, integrations: integrations, depth: depth + 1)).padding(.leading, 12)
                 }
             }
         }.padding(.vertical, 3)
@@ -86,7 +88,7 @@ struct TemplateSettingsView: View {
             List {
                 ForEach(Array(model.configuration.templates.enumerated()), id: \.element.id) { index, template in
                     HStack(spacing: 12) {
-                        Image(systemName: "doc.text").font(.title2).foregroundStyle(.blue).frame(width: 30)
+                        Image(systemName: MenuIcon.template(template.id)).font(.title2).foregroundStyle(.blue).frame(width: 30).accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(template.name).font(.headline)
                             Text(template.filename + (template.usesVariables ? " · 文本变量" : "") + (template.isBuiltIn ? " · 内置" : " · 已导入")).font(.caption).foregroundStyle(.secondary)
@@ -190,7 +192,7 @@ struct ApplicationSettingsView: View {
             List {
                 ForEach(Array(model.configuration.integrations.enumerated()), id: \.element.id) { index, app in
                     HStack(spacing: 12) {
-                        Image(systemName: app.adapterType == "terminal" ? "terminal" : "app").font(.title2).foregroundStyle(.blue).frame(width: 30)
+                        ApplicationIcon(integration: app)
                         VStack(alignment: .leading, spacing: 4) {
                             Toggle(app.name, isOn: Binding(get: { app.enabled }, set: { enabled in model.save { $0.integrations[index].enabled = enabled } }))
                             Text(app.adapterType == "terminal" ? "在当前目录启动终端" : "接收选中文件或文件夹").font(.caption).foregroundStyle(.secondary)

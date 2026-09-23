@@ -878,7 +878,8 @@
       "status": "NOT_RUN",
       "evidence": [
         "evidence/EV-liquid-glass-001.md",
-        "evidence/EV-source-isolation-001.md"
+        "evidence/EV-source-isolation-001.md",
+        "evidence/EV-app-icons-001.md"
       ],
       "remaining": "Liquid Glass availability 编译及窗口几何已测；最新包截图、深浅色、键盘/VoiceOver、多屏和旧系统降级未验收。"
     },

@@ -44,6 +44,7 @@ open .build/native/RightMouse.app
 - 完整配置、书签、模板和操作记录保存在宿主私有目录；Finder 只读取菜单显示快照。旧布局支持同卷原子迁移，冲突时保留现场。
 - 损坏操作记录保留原件并生成受容量限制的去重原始副本；核对页展示暂存占用，对归属和授权均有效的孤立暂存提供显式清理。
 - 复制、移动及撤销提交后再次核对对象；跨卷来源先隔离再验证清理，异常时在恢复页显示保留副本位置。
+- 独立品牌应用图标、统一功能符号与 Terminal/VS Code 应用小图标，覆盖设置页、操作台及 Finder 菜单。
 - 液态玻璃导航与预览，主窗口默认 960×680 pt，在当前屏幕居中；旧系统与减少透明度模式提供材质降级。
 
 首次使用需在系统设置中启用 Finder 扩展。本机模式的内置菜单覆盖普通本地目录与挂载卷；共享模式需在应用中选择使用目录，扩展仅对配置目录提供菜单。目录授权来自系统选择器；配置中的路径文字本身不代表授权。
@@ -86,6 +87,7 @@ flowchart LR
 
 ## 参考
 
+- [品牌与菜单图标验证](specs/001-finder-core/evidence/EV-app-icons-001.md)
 - [本机 Finder 模式及最新验收](specs/001-finder-core/evidence/EV-local-finder-001.md)
 - [最新剪切与协议验证](specs/001-finder-core/evidence/EV-clipboard-protocol-001.md)
 - [构建与签名配置](Config/README.md)
