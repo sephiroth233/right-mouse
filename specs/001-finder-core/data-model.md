@@ -26,7 +26,7 @@
 | Template | templateID、displayName、resourceName、extension、defaultStem、textVariables、digest | 宿主；资源路径限应用模板目录；禁止 `..` 逃逸 |
 | FavoriteLocation | favoriteID、grantID?、fileReference、displayName、order、availability | 宿主；删除收藏不删除目录；不可用需用户修复 |
 | AppIntegration | integrationID、bundleID、applicationRef、adapterType、capabilities | 宿主；能力为 file/folder/workingDirectory；安装位置变更需复验 |
-| PendingMove | token、references、createdAt、expiresAt、pasteboardMarker | 宿主会话内；24 小时失效；退出/崩溃后不恢复为活动剪切列表 |
+| PendingMove | token、references、createdAt、expiresAt、pasteboardMarker、pasteboardChangeCount | 宿主会话内；24 小时失效；退出/崩溃后不恢复为活动剪切列表 |
 | OperationRecord | operationID=requestID、requestDigest、schemaVersion、revision、state、createdAt、items、error、retryOf? | 宿主单写；变更执行前先持久 accepted |
 | OperationItem | itemID、sourceRef、destinationRef、sourceIdentity、destinationIdentity、phase、intent、result、error、cleanupPending | 宿主；逐项存储阶段，不能只记录整批百分比 |
 | FileIdentity | volumeID、resourceID、kind、size、modificationTime、changeTime?、digest?、metadataDigest? | 执行器实际读取；不信任调用方上报值；不同文件系统可缺部分字段 |
@@ -78,7 +78,7 @@ targetCommitted -> sourceRetained（无法证明可安全删除）
 
 ### 2.3 剪切列表生命周期
 
-新剪切生成新 token，向剪贴板写私有标记；粘贴要求标记、宿主活动 token、时效均匹配。剪贴板被改写、超过 24 小时或宿主重新启动，则旧列表失效；新剪切覆盖旧列表。成功项目移出列表，失败/跳过项留存并刷新标记；在宿主崩溃后只能进入操作恢复，不通过过期剪贴板自动接续。
+新剪切生成新 token，向剪贴板写私有标记；粘贴要求标记、宿主活动 token、剪贴板 changeCount 和时效均匹配。剪贴板被改写、超过 24 小时或宿主重新启动，则旧列表失效；新剪切覆盖旧列表。成功项目移出列表，失败/跳过项仅在会话仍有效时留存并刷新共享摘要，不重新写剪贴板标记；在宿主崩溃后只能进入操作恢复，不通过过期剪贴板自动接续。新剪切的快照或最终任务记录写入失败，必须使本次创建的 token 失效。文件操作结果已保存后，剪切摘要更新失败只终止会话并单独提示，不能覆盖原文件回执。
 
 ## 3. 持久化与恢复
 

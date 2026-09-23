@@ -22,7 +22,7 @@
 
 已提交里程碑：`8df543f` 规格基线、`8428ae9` 核心引擎、`da90eec` 原生宿主与扩展、`2de91f6` 液态玻璃与居中窗口、`9dacf97` 签名及 profiles 校验、`2c0609e` 持久撤销、失败重试及恢复隔离。119/59 是夹具检查数，不代表已通过相同数量的验收用例。完整任务继续按以下门禁勾选。
 
-施工状态见 [V1 实现差距记录](evidence/EV-implementation-gaps-001.md)。批量冲突选择、最近目标、VS Code 多目录语义、记录保留、诊断导出、结构化错误码及配置容量契约已有实现和夹具。本轮接入孤立暂存清理、首次创建演练、宿主私有存储分层和损坏日志保全副本，另已修复提交后对象替换与来源清理竞争，304 项核心与 356 项宿主侧检查通过，见[首次启动修复](evidence/EV-startup-retention-001.md)、[来源隔离修复](evidence/EV-source-isolation-001.md)及[分层集成记录](evidence/EV-private-storage-recovery-001.md)。真实 APFS 双卷另有 15 项检查通过，见[双卷证据](evidence/EV-real-volume-001.md)。保留策略的保守边界与尚缺的系统验收继续单独记录，整项任务未据夹具结果勾选完成。
+施工状态见 [V1 实现差距记录](evidence/EV-implementation-gaps-001.md)。批量冲突选择、最近目标、VS Code 多目录语义、记录保留、诊断导出、结构化错误码及配置容量契约已有实现和夹具。本轮接入孤立暂存清理、首次创建演练、宿主私有存储分层和损坏日志保全副本，另已修复提交后对象替换与来源清理竞争，318 项核心与 389 项宿主侧检查通过，见[剪切与协议验证](evidence/EV-clipboard-protocol-001.md)、[来源隔离修复](evidence/EV-source-isolation-001.md)及[分层集成记录](evidence/EV-private-storage-recovery-001.md)。真实 APFS 双卷另有 15 项检查通过，见[双卷证据](evidence/EV-real-volume-001.md)。保留策略的保守边界与尚缺的系统验收继续单独记录，整项任务未据夹具结果勾选完成。
 
 本轮数据层 `f10ff12`、应用工作流 `c774831` 已提交；[集成证据](evidence/EV-workflows-001.md) 记录 150 项核心与 168 项宿主侧检查、开发包构建与验收边界。
 

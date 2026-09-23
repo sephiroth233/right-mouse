@@ -2,7 +2,7 @@
 
 This harness compiles the production `HostController`, `AppModel`, and
 `ApplicationLauncher` against the real `RightMouseCore` module. It runs file
-operations only in a fresh random directory under the system temporary folder.
+operations only in fresh random fixture directories under the system temporary folder or workspace .build directory.
 
 Run from the repository root:
 
@@ -10,7 +10,7 @@ Run from the repository root:
 scripts/check-host.sh
 ```
 
-The check disables Finder reveal behavior and avoids clipboard, application
+The check disables Finder reveal behavior and avoids the user's general clipboard, application
 launch, conflict dialogs, directory pickers, TCC changes, and user files. It
 exercises interactive TXT and JSON creation, fixed-ID request deduplication,
 copy, move, queued cancellation, receipts, crash-style recovery of an accepted
@@ -26,8 +26,11 @@ Retry also rejects same-path replacement of either a failed source or the origin
 destination directory. Permission repair retains the same inode, bytes and mtime
 and remains eligible for retry. Rejection preserves both objects and the original
 receipt without creating child work.
-The complete harness now passes 168 host-side checks: 153 real HostController
-fixture assertions and 15 pure Open With planning assertions. ConflictChecks
+The complete harness now passes 389 host-side checks, including 33 isolated
+clipboard/session assertions and 15 pure Open With planning assertions. Clipboard
+checks use a unique named NSPasteboard and release it afterward; they simulate
+external writes, use an injected expiry clock, and preserve file receipts when
+pending-session publication fails. ConflictChecks
 adds durable waiting and batch decisions; RecentDestinationHostChecks adds
 bookmarked target selection, invalid-reference refusal, repair and restart;
 OpenWithHostChecks records the final OS application-open boundary to verify
