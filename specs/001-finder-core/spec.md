@@ -93,3 +93,14 @@ V1.1 在独立规格目录立项，不在此规格中悄悄扩展范围。若 G0
 - [原始方案](../../docs/design-plan.md)
 - [工程约束](../../docs/sdd/constitution.md)
 - [Finder Sync API 边界](https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/Finder.html)
+
+## 2026-09-23 启动与后台驻留补充
+
+- 登录启动依据 macOS 登录项启动事件识别，静默连接 Finder 服务，不打开设置、不激活前台、不显示 Dock 图标；不能仅因启用了开机自启就把用户的手动启动也隐藏。
+- 手动启动、再次打开应用、点击菜单栏设置或 Finder 的 RightMouse 设置入口时，恢复 Dock 图标并打开居中的设置窗口。
+- 红色关闭按钮关闭最后一个应用窗口后，切换为后台应用，隐藏 Dock/应用切换器入口，继续保留进程与 Finder 服务。最小化窗口不算关闭；仍有其他应用窗口时保留 Dock。真正退出仍通过“退出 RightMouse”或前台 Cmd+Q。
+- 通用设置新增“在菜单栏显示图标”，默认开启；关闭后立即移除屏幕顶部图标，保存后重启保持。旧配置未包含此字段时沿用显示；隐藏菜单栏图标不影响 Dock 策略和 Finder 服务。
+- 即使 Dock 与菜单栏图标均隐藏，仍可从 Applications、Spotlight 或 Finder 设置菜单找回设置；界面应说明此恢复方式。窗口恢复保持原有大小、居中和内部滚动行为。
+- 验证启动事件、手动/后台唤醒区分、关闭/重新打开、开关持久化及旧配置迁移。真实注销/重启验收不以事件模拟替代；不为验收中断用户当前会话。
+
+启动识别依据：[Apple 登录项启动事件](https://developer.apple.com/documentation/coreservices/keyaelaunchedasloginitem)。
