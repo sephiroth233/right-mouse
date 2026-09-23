@@ -1,6 +1,6 @@
 # 系统服务兼容入口
 
-状态：施工中。前置证据：[iCloud 菜单排查](../../docs/icloud-menu-investigation.md)。
+状态：实现与本机入口验证完成，云盘写入/同步及真实外部应用启动待验收。证据：[服务验证记录](../../docs/services-compatibility-validation.md)。前置证据：[iCloud 菜单排查](../../docs/icloud-menu-investigation.md)。
 
 ## 目标与范围
 

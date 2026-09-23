@@ -83,4 +83,4 @@
 - [Apple Finder Sync 文档](https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/Finder.html)：菜单依赖监控范围；工具栏在范围之外可显示，但不保证取得当前目标 URL。
 - [Apple 开发者论坛](https://developer.apple.com/forums/thread/756711)：工程师说明部分目录和多扩展覆盖有限制；第三方开发者报告 iCloud Drive 不能监控。这是排查线索，不能替代本机对照，也不代表所有 macOS 版本均相同。
 
-系统 Services 备用入口属于后续功能设计，不算本轮已实现；不得因菜单缺失建议用户购买开发者账号或授予完整磁盘访问权限。
+后续已实现五个系统 Services 兼容入口，详见 [服务验证记录](services-compatibility-validation.md)。它不改变本页对 Finder Sync 覆盖范围的结论；不得因菜单缺失建议用户购买开发者账号或授予完整磁盘访问权限。
