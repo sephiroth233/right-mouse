@@ -319,7 +319,8 @@
       "evidence": [
         "evidence/EV-real-volume-001.md",
         "evidence/EV-source-isolation-001.md",
-        "contracts/local-xpc.md"
+        "contracts/local-xpc.md",
+        "evidence/EV-local-xpc-delivery-001.md"
       ]
     },
     {
@@ -363,7 +364,8 @@
         "evidence/EV-core-checks-001.md",
         "evidence/EV-top-level-menu-001.md",
         "evidence/EV-local-xpc-probe-001.md",
-        "contracts/local-xpc.md"
+        "contracts/local-xpc.md",
+        "evidence/EV-local-xpc-delivery-001.md"
       ]
     },
     {
@@ -384,7 +386,8 @@
         "evidence/EV-source-isolation-001.md",
         "evidence/EV-clipboard-protocol-001.md",
         "evidence/EV-local-xpc-probe-001.md",
-        "contracts/local-xpc.md"
+        "contracts/local-xpc.md",
+        "evidence/EV-local-xpc-delivery-001.md"
       ]
     },
     {
@@ -590,12 +593,13 @@
       "dependsOn": [
         "T021"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "evidence": [
         "evidence/EV-native-build-001.md",
         "../../Config/validation/finder-load-2026-09-22.md",
         "evidence/EV-source-isolation-001.md",
-        "contracts/local-xpc.md"
+        "contracts/local-xpc.md",
+        "evidence/EV-local-xpc-delivery-001.md"
       ]
     },
     {
