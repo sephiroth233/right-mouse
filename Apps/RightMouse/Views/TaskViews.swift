@@ -2,60 +2,13 @@ import SwiftUI
 import AppKit
 import RightMouseCore
 
-struct FileToolsView: View {
-    @ObservedObject var model: AppModel
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack { Text("要处理的文件").font(.headline); Spacer(); if !model.selectedFiles.isEmpty { Button("清空") { model.selectedFiles = [] } }; Button("选择文件或目录…") { model.chooseFiles() } }
-                        if model.selectedFiles.isEmpty { Text("尚未选择文件。新建文件只需设置目标目录。").foregroundStyle(.secondary).padding(.vertical, 8) }
-                        else {
-                            ForEach(Array(model.selectedFiles.prefix(8).enumerated()), id: \.offset) { _, file in Label(file.path, systemImage: "doc").lineLimit(1).truncationMode(.middle).font(.callout) }
-                            if model.selectedFiles.count > 8 { Text("以及其他 \(model.selectedFiles.count - 8) 项").font(.caption).foregroundStyle(.secondary) }
-                        }
-                    }.padding(8)
-                }
-                GroupBox {
-                    HStack { VStack(alignment: .leading, spacing: 6) { Text("目标目录").font(.headline); Text(model.destination?.path ?? "尚未选择").foregroundStyle(.secondary).lineLimit(2).truncationMode(.middle) }; Spacer(); Button("选择目录…") { model.chooseDestination() } }.padding(8)
-                }
-                GroupBox("操作") {
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack(spacing: 12) {
-                            Menu { ForEach(model.configuration.templates) { template in Button { model.perform("createFile:\(template.id)") } label: { Label(template.name, systemImage: MenuIcon.template(template.id)) } } } label: { Label("新建文件", systemImage: "doc.badge.plus") }.disabled(model.destination == nil)
-                            Menu {
-                                Button("完整路径", systemImage: "link") { model.perform("copyText:path") }
-                                Button("文件名", systemImage: "textformat") { model.perform("copyText:name") }.disabled(model.selectedFiles.isEmpty)
-                                Button("不含扩展名", systemImage: "textformat.abc") { model.perform("copyText:stem") }.disabled(model.selectedFiles.isEmpty)
-                                Button("终端转义路径", systemImage: "terminal") { model.perform("copyText:shellPath") }
-                            } label: { Label("复制文本", systemImage: "doc.on.clipboard") }.disabled(model.selectedFiles.isEmpty && model.destination == nil)
-                            Menu { ForEach(model.configuration.integrations.filter(\.enabled)) { app in Button { model.perform("openWith:\(app.id)") } label: { Label { Text(app.name) } icon: { ApplicationIcon(integration: app, size: 16) } } } } label: { Label("打开方式", systemImage: "square.grid.2x2") }.disabled(model.selectedFiles.isEmpty && model.destination == nil)
-                        }
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), alignment: .leading)], alignment: .leading, spacing: 10) {
-                            Button("剪切所选文件", systemImage: "scissors") { model.perform("stageMove") }.disabled(model.selectedFiles.isEmpty)
-                            Button("粘贴待移动文件", systemImage: "clipboard") { model.perform("pasteMove") }.disabled(model.destination == nil)
-                            Button("复制到目标", systemImage: "doc.on.doc") { model.perform("copyTo") }.disabled(model.selectedFiles.isEmpty || model.destination == nil)
-                            Button("移动到目标", systemImage: "arrow.right.doc.on.clipboard") { model.perform("moveTo") }.disabled(model.selectedFiles.isEmpty || model.destination == nil)
-                        }
-                        Text("操作结果会出现在“任务记录”。处理同名文件时按“文件操作”中的策略询问、跳过或保留两份。").font(.caption).foregroundStyle(.secondary)
-                    }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
-                }
-                if let task = model.tasks.first {
-                    GroupBox("最近任务") { HStack { Image(systemName: task.canCancel ? "clock" : "checklist"); Text(task.title); Spacer(); Text(taskStatus(task.status)).foregroundStyle(.secondary) }.padding(8) }
-                }
-            }.padding(.horizontal, 28).padding(.bottom, 24)
-        }
-    }
-}
-
 struct TasksView: View {
     @ObservedObject var model: AppModel
     @ViewState private var expanded: Set<UUID> = []
     var body: some View {
         Group {
             if model.tasks.isEmpty {
-                ContentUnavailableView("还没有任务", systemImage: "checklist", description: Text("从 Finder 右键菜单或文件操作台发起操作，结果会显示在这里。"))
+                ContentUnavailableView("还没有任务", systemImage: "checklist", description: Text("从 Finder 右键菜单发起操作，结果会显示在这里。"))
             } else {
                 ScrollView {
                     LazyVStack(spacing: 14) {

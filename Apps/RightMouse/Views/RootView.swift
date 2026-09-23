@@ -3,12 +3,11 @@ import AppKit
 import RightMouseCore
 
 private enum SettingsPage: String, CaseIterable, Identifiable {
-    case general = "通用", tools = "文件操作台", menus = "菜单管理", templates = "新建文件", favorites = "常用目录", applications = "打开方式", diagnostics = "权限与诊断"
+    case general = "通用", menus = "菜单管理", templates = "新建文件", favorites = "常用目录", applications = "打开方式", diagnostics = "权限与诊断"
     var id: Self { self }
     var icon: String {
         switch self {
         case .general: return "slider.horizontal.3"
-        case .tools: return "cursorarrow.click.2"
         case .menus: return "list.bullet.indent"
         case .templates: return "doc.badge.plus"
         case .favorites: return "folder.badge.gearshape"
@@ -19,7 +18,6 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .general: return "让常用文件操作，就在右键菜单里。"
-        case .tools: return "选择文件与目标目录，使用和 Finder 菜单相同的操作服务。"
         case .menus: return "只留下常用操作，按你的习惯排列。"
         case .templates: return "用真实模板创建文件，保留格式与初始内容。"
         case .favorites: return "收藏经常使用的文件夹，一步打开或整理文件。"
@@ -74,7 +72,7 @@ struct RootView: View {
                     Text(current.subtitle).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }.padding(24)
                 if model.isDevelopmentStorage {
-                    Label(model.isLocalFinderMode ? (model.authenticatedXPCBuild ? model.localServiceStatus : "本机模式 · Finder 使用内置菜单，文件操作将在应用中确认。") : "开发模式 · Finder 菜单暂不可用。可在文件操作台使用本地功能。", systemImage: model.localServiceReady ? "checkmark.shield" : "exclamationmark.triangle")
+                    Label(model.isLocalFinderMode ? (model.authenticatedXPCBuild ? model.localServiceStatus : "本机模式 · Finder 使用内置菜单，文件操作将在应用中确认。") : "开发模式 · Finder 菜单暂不可用，请使用本机发行版连接 Finder。", systemImage: model.localServiceReady ? "checkmark.shield" : "exclamationmark.triangle")
                         .font(.callout).fixedSize(horizontal: false, vertical: true)
                         .padding(12).background((model.localServiceReady ? Color.green : Color.orange).opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
                         .padding(.horizontal, 24).padding(.bottom, 12)
@@ -87,7 +85,6 @@ struct RootView: View {
                 Group {
                     switch current {
                     case .general: GeneralSettingsView(model: model, navigate: { page = $0 }, showTasks: showTasks)
-                    case .tools: FileToolsView(model: model)
                     case .menus: MenuSettingsView(model: model)
                     case .templates: TemplateSettingsView(model: model)
                     case .favorites: ScrollView { LocationSettingsView(model: model, watched: false) }
@@ -118,10 +115,10 @@ private struct GeneralSettingsView: View {
     var body: some View {
         Form {
             Section("开始使用") {
-                SetupStep(number: 1, title: "启用 Finder 扩展", subtitle: model.isLocalFinderMode ? (model.extensionEnabled ? "扩展已启用。请在普通本地目录右键验收内置菜单。" : "在系统设置中启用 RightMouse Finder 扩展。") : model.isDevelopmentStorage ? (model.extensionEnabled ? "扩展已登记，但共享通信不可用。" : "开发模式下共享通信不可用，Finder 菜单暂不可用。") : (model.extensionEnabled ? "扩展已启用，可继续选择覆盖目录。" : "在系统设置中启用 RightMouse Finder 扩展。"), complete: (!model.isDevelopmentStorage || model.isLocalFinderMode) && model.extensionEnabled) { model.showExtensionSettings() }
+                SetupStep(number: 1, title: "启用 Finder 扩展", subtitle: model.isLocalFinderMode ? (model.extensionEnabled ? "扩展已启用。请在普通本地目录右键使用已配置的菜单。" : "在系统设置中启用 RightMouse Finder 扩展。") : model.isDevelopmentStorage ? (model.extensionEnabled ? "扩展已登记，但共享通信不可用。" : "开发模式下共享通信不可用，Finder 菜单暂不可用。") : (model.extensionEnabled ? "扩展已启用，可继续选择覆盖目录。" : "在系统设置中启用 RightMouse Finder 扩展。"), complete: (!model.isDevelopmentStorage || model.isLocalFinderMode) && model.extensionEnabled) { model.showExtensionSettings() }
                 SetupStep(number: 2, title: "选择使用目录", subtitle: model.isLocalFinderMode ? "本机菜单覆盖普通本地目录；此处目录配置用于共享模式。" : "已配置 \(model.configuration.watchedLocations.count) 个目录；子文件夹一并覆盖。", complete: !model.configuration.watchedLocations.isEmpty) { navigate(.diagnostics) }
                 SetupExerciseView(model: model, showTasks: showTasks)
-                SetupStep(number: 4, title: "定制右键菜单", subtitle: model.isLocalFinderMode ? "选择内置操作放到 Finder 一级菜单，其余操作可收进子菜单。" : "新建文件、复制路径、剪切移动与打开方式。", complete: false) { navigate(.menus) }
+                SetupStep(number: 4, title: "定制右键菜单", subtitle: model.isLocalFinderMode ? "选择常用操作放到 Finder 一级菜单，其余操作可收进子菜单。" : "新建文件、复制路径、剪切移动与打开方式。", complete: false) { navigate(.menus) }
             }
             if model.authenticatedXPCBuild {
                 Section("本机连接") {
@@ -180,7 +177,7 @@ private struct DiagnosticsSettingsView: View {
                                 Button("启用或修复连接") { model.onRepairLocalService?() }
                                 Button("停用并移除服务") { model.onStopLocalService?() }
                             }
-                            Text("停用后 Finder 文件操作将不可用；应用内操作、设置和任务记录会保留。删除应用前可先在这里移除服务。").font(.caption).foregroundStyle(.secondary)
+                            Text("停用后 Finder 文件操作将不可用；设置和任务记录会保留。删除应用前可先在这里移除服务。").font(.caption).foregroundStyle(.secondary)
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
                     }
                 }
