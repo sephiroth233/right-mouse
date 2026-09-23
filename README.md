@@ -3,7 +3,7 @@
 原生 macOS Finder 右键效率工具，使用 SwiftUI、AppKit 和 FinderSync 实现。当前是开发版本：已有宿主、真实 Finder 扩展与文件操作引擎，系统接入与发布验收仍在进行。
 
 
-无开发者账号的本机发行版已接入签名校验的 XPC 通道。构建与打包使用 `python3 scripts/build-local-app.py` 和 `scripts/package-local-app.sh --no-build`，产物为 `dist/RightMouse-0.2.0-local-<架构>.dmg`。首次安装、升级和卸载见 [本机版安装说明](docs/local-install.md)，通信与验收约束见 [XPC 施工契约](specs/001-finder-core/contracts/local-xpc.md)。本机版不使用 App Group，也未经过 Apple 公证；原来的开发 ZIP 与 Developer ID 公证路线仍保留。
+无开发者账号的本机预览版已接入签名校验的 XPC 通道。构建与打包使用 `python3 scripts/build-local-app.py` 和 `scripts/package-local-app.sh --no-build`，产物为 `dist/RightMouse-0.2.0-local-<架构>.dmg`。首次安装、升级和卸载见 [本机版安装说明](docs/local-install.md)，通信与验收约束见 [XPC 施工契约](specs/001-finder-core/contracts/local-xpc.md)。本机版不使用 App Group，也未经过 Apple 公证；原来的开发 ZIP 与 Developer ID 公证路线仍保留。
 
 ## 目录
 
