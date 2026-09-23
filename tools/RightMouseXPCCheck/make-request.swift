@@ -15,4 +15,4 @@ if mode == "open" {
     action = .createFile(templateID: "txt", destination: reference, name: args[3])
 }
 let request = CommandRequest(context: context, action: action, now: mode == "expired" ? Date().addingTimeInterval(-300) : Date())
-print(try LocalFinderRequest.encode(request, localModeEnabled: true).absoluteString)
+print(String(decoding: try WireCodec.encoder().encode(request), as: UTF8.self))

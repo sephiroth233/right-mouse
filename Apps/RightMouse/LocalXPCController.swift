@@ -9,13 +9,24 @@ final class FinderXPCSession: NSObject, LocalFinderService {
     private var handshaken = false
     private var consumed = false
     private let receive: (Data, @escaping (Bool) -> Void) -> Void
-    init(receive: @escaping (Data, @escaping (Bool) -> Void) -> Void) { self.receive = receive }
+    private let readMenu: (@escaping (Data) -> Void) -> Void
+    init(readMenu: @escaping (@escaping (Data) -> Void) -> Void = { $0(Data()) }, receive: @escaping (Data, @escaping (Bool) -> Void) -> Void) {
+        self.readMenu = readMenu; self.receive = receive
+    }
     func handshake(_ nonce: String, reply: @escaping (String) -> Void) {
         lock.lock()
         let valid = !consumed && !handshaken && LocalXPCIdentity.validNonce(nonce)
         if valid { handshaken = true }
         lock.unlock()
         reply(valid ? LocalXPCIdentity.response(nonce) : "")
+    }
+    func menuState(reply: @escaping (Data) -> Void) {
+        lock.lock()
+        let valid = handshaken && !consumed
+        consumed = true
+        lock.unlock()
+        guard valid else { reply(Data()); return }
+        readMenu(reply)
     }
     func perform(_ payload: Data, reply: @escaping (Bool) -> Void) {
         lock.lock()
@@ -29,11 +40,14 @@ final class FinderXPCSession: NSObject, LocalFinderService {
 
 final class FinderXPCListenerDelegate: NSObject, NSXPCListenerDelegate {
     let receive: (Data, @escaping (Bool) -> Void) -> Void
-    init(receive: @escaping (Data, @escaping (Bool) -> Void) -> Void) { self.receive = receive }
+    let readMenu: (@escaping (Data) -> Void) -> Void
+    init(readMenu: @escaping (@escaping (Data) -> Void) -> Void, receive: @escaping (Data, @escaping (Bool) -> Void) -> Void) {
+        self.readMenu = readMenu; self.receive = receive
+    }
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
         guard connection.effectiveUserIdentifier == getuid() else { return false }
         connection.exportedInterface = NSXPCInterface(with: LocalFinderService.self)
-        connection.exportedObject = FinderXPCSession(receive: receive)
+        connection.exportedObject = FinderXPCSession(readMenu: readMenu, receive: receive)
         connection.resume(); return true
     }
 }
@@ -51,13 +65,15 @@ final class FinderXPCListenerDelegate: NSObject, NSXPCListenerDelegate {
     private let logger = Logger(subsystem: "cn.rightmouse.RightMouse", category: "LocalXPC")
     init(identity: LocalXPCIdentity, controller: HostController) {
         self.identity = identity; model = controller.model
-        delegate = FinderXPCListenerDelegate { [weak controller] data, reply in
+        delegate = FinderXPCListenerDelegate(readMenu: { [weak controller] reply in
+            Task { @MainActor in reply(controller?.authenticatedMenuState() ?? Data()) }
+        }) { [weak controller] data, reply in
             Task { @MainActor in reply(controller?.receiveAuthenticatedFinderData(data) ?? false) }
         }
         listener.setConnectionCodeSigningRequirement(identity.requirement("cn.rightmouse.RightMouse.FinderExtension"))
         listener.delegate = delegate; listener.resume()
         controller.model.authenticatedXPCBuild = true
-        controller.model.storageDiagnostic = "本机连接服务通过身份校验连接 Finder 和主应用，不依赖 App Group。内置操作无需逐次确认来源；目录选择、访问授权和同名冲突仍会按需提示。"
+        controller.model.storageDiagnostic = "本机连接服务通过身份校验连接 Finder 和主应用，不依赖 App Group。菜单配置与剪切状态自动同步，操作无需逐次确认来源；目录选择、访问授权和同名冲突仍会按需提示。"
         controller.model.onRepairLocalService = { [weak self] in self?.start(repair: true) }
         controller.model.onStopLocalService = { [weak self] in self?.stop() }
     }

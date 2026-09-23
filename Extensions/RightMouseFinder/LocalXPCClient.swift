@@ -12,8 +12,7 @@ import RightMouseCore
         Task {
             defer { pending -= 1 }
             do {
-                let url = try LocalFinderRequest.encode(request, localModeEnabled: true)
-                let data = Data(url.absoluteString.utf8)
+                let data = try AuthenticatedFinderRequest.encode(request)
                 var endpoint: NSXPCListenerEndpoint?
                 // Wake only on a user operation, never while constructing a menu.
                 wakeHost()
@@ -23,15 +22,8 @@ import RightMouseCore
                     try await Task.sleep(nanoseconds: 300_000_000)
                 }
                 guard let endpoint else { throw LocalXPCError.unavailable }
-                let connection = NSXPCConnection(listenerEndpoint: endpoint)
-                connection.remoteObjectInterface = NSXPCInterface(with: LocalFinderService.self)
-                connection.setCodeSigningRequirement(identity.requirement("cn.rightmouse.RightMouse"))
-                connection.resume(); defer { connection.invalidate() }
-                let nonce = UUID().uuidString
-                let response: String = try await LocalXPCCall.invoke(connection) { proxy, reply in
-                    (proxy as! LocalFinderService).handshake(nonce, reply: reply)
-                }
-                guard response == LocalXPCIdentity.response(nonce) else { throw LocalXPCError.rejected }
+                let connection = try await connect(endpoint)
+                defer { connection.invalidate() }
                 // No paths or operations leave this process before the authenticated
                 // response above. After send, never automatically replay the action.
                 let accepted: Bool = try await LocalXPCCall.invoke(connection) { proxy, reply in
@@ -40,6 +32,29 @@ import RightMouseCore
                 guard accepted else { throw LocalXPCError.rejected }
             } catch { failure() }
         }
+    }
+    func menuState() async throws -> LocalFinderMenuState {
+        guard let endpoint = try await discover() else { throw LocalXPCError.unavailable }
+        let connection = try await connect(endpoint)
+        defer { connection.invalidate() }
+        let data: Data = try await LocalXPCCall.invoke(connection, timeout: 2) { proxy, reply in
+            (proxy as! LocalFinderService).menuState(reply: reply)
+        }
+        return try LocalFinderMenuState.decode(data)
+    }
+    private func connect(_ endpoint: NSXPCListenerEndpoint) async throws -> NSXPCConnection {
+        let connection = NSXPCConnection(listenerEndpoint: endpoint)
+        connection.remoteObjectInterface = NSXPCInterface(with: LocalFinderService.self)
+        connection.setCodeSigningRequirement(identity.requirement("cn.rightmouse.RightMouse"))
+        connection.resume()
+        do {
+            let nonce = UUID().uuidString
+            let response: String = try await LocalXPCCall.invoke(connection) { proxy, reply in
+                (proxy as! LocalFinderService).handshake(nonce, reply: reply)
+            }
+            guard response == LocalXPCIdentity.response(nonce) else { throw LocalXPCError.rejected }
+            return connection
+        } catch { connection.invalidate(); throw error }
     }
     private func discover() async throws -> NSXPCListenerEndpoint? {
         let connection = NSXPCConnection(machServiceName: identity.discoveryService)

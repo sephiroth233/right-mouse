@@ -182,11 +182,30 @@ import Darwin
     @discardableResult func receiveAuthenticatedFinderData(_ data: Data) -> Bool {
         guard allowsLocalFinderRequests, data.count <= LocalFinderRequest.maximumURLBytes else { return false }
         do {
-            guard let text = String(data: data, encoding: .utf8), let url = URL(string: text) else { return false }
-            let request = try LocalFinderRequest.decode(url, localModeEnabled: true)
-            _ = try localFinderDetails(request)
+            let request: CommandRequest
+            if data.first == UInt8(ascii: "{") {
+                request = try AuthenticatedFinderRequest.decode(data)
+            } else {
+                // Compatibility for the preceding signed local preview only.
+                guard let text = String(data: data, encoding: .utf8), let url = URL(string: text) else { return false }
+                request = try LocalFinderRequest.decode(url, localModeEnabled: true)
+            }
+            let state = validPending().map { PendingMoveSnapshot(token: $0.token, count: $0.files.count, expiresAt: $0.expires) }
+            // A duplicate already accepted by the ledger has no new authority or
+            // side effect; do not require a consumed cut token for its receipt.
+            if try ledger.entry(request.requestID)?.request == request {
+                return submit(request, interactive: true)
+            }
+            try AuthenticatedFinderRequest.validate(request, configuration: model.configuration, pending: state)
             return submit(request, interactive: true)
         } catch { model.reportError(error); return false }
+    }
+
+    func authenticatedMenuState() -> Data {
+        guard allowsLocalFinderRequests else { return Data() }
+        let state = validPending().map { PendingMoveSnapshot(token: $0.token, count: $0.files.count, expiresAt: $0.expires) }
+        return (try? LocalFinderMenuState(configuration: MenuConfigurationSnapshot(configuration: model.configuration, available: !model.isReadOnly),
+            pendingMove: state, pasteboardChangeCount: pasteboard.changeCount).encoded()) ?? Data()
     }
 
     private func localFinderDetails(_ request: CommandRequest) throws -> String {
@@ -619,7 +638,11 @@ import Darwin
         try PrivateFileIO.write(WireCodec.encoder().encode(PendingMoveSnapshot(token: pending.token, count: pending.files.count, expiresAt: pending.expires)), to: paths.pendingMoveURL)
         DistributedNotificationCenter.default().postNotificationName(Notification.Name("cn.rightmouse.pendingMoveChanged"), object: nil, deliverImmediately: true)
     }
-    private func invalidatePending() { pending = nil; pendingPasteboardChangeCount = nil; try? FileManager.default.removeItem(at: paths.pendingMoveURL) }
+    private func invalidatePending() {
+        let changed = pending != nil
+        pending = nil; pendingPasteboardChangeCount = nil; try? FileManager.default.removeItem(at: paths.pendingMoveURL)
+        if changed { DistributedNotificationCenter.default().postNotificationName(Notification.Name("cn.rightmouse.pendingMoveChanged"), object: nil, deliverImmediately: true) }
+    }
     private func publish(_ receipt: CommandReceipt) throws {
         model.receiveSetupReceipt(receipt)
         try PrivateFileIO.write(WireCodec.encoder().encode(receipt), to: paths.receiptsDirectory.appendingPathComponent(receipt.requestID.uuidString + ".json"))

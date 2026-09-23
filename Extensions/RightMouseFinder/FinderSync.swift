@@ -22,6 +22,9 @@ final class FinderSync: FIFinderSync {
     private var refreshTimer: DispatchSourceTimer?
     private var configurationError = false
     private var localClient: LocalXPCClient?
+    private let authenticatedLocal = LocalXPCIdentity() != nil
+    private var refreshingLocal = false
+    private var pendingClipboardChangeCount: Int?
     private let localMode = Bundle.main.object(forInfoDictionaryKey: "RightMouseLocalFinderMode") as? Bool == true
     private var invocations: [Int: (value: MenuInvocation, expires: Date)] = [:]
     private var nextInvocationTag = 1
@@ -43,13 +46,26 @@ final class FinderSync: FIFinderSync {
             DispatchQueue.main.async { self?.applicationIcons = loaded }
         }
         if localMode {
-            let cached = UserDefaults.standard.string(forKey: LocalMenuLayout.cacheKey)
-                .flatMap { try? LocalMenuLayout.decode($0) }
-            configuration = MenuConfigurationSnapshot(configuration: cached?.configuration ?? LocalMenuLayout.baseConfiguration)
+            if authenticatedLocal {
+                // Cache display metadata only. Live cut sessions never survive restart.
+                if let data = UserDefaults.standard.data(forKey: LocalFinderMenuState.cacheKey),
+                   data.count <= MenuSnapshotStore.maximumBytes,
+                   let cached = try? WireCodec.decoder().decode(MenuConfigurationSnapshot.self, from: data),
+                   (try? cached.validate()) != nil {
+                    configuration = cached
+                }
+                for name in ["cn.rightmouse.configurationChanged", "cn.rightmouse.pendingMoveChanged"] {
+                    DistributedNotificationCenter.default().addObserver(self, selector: #selector(receiveLocalLayout(_:)), name: Notification.Name(name), object: nil, suspensionBehavior: .deliverImmediately)
+                }
+            } else {
+                let cached = UserDefaults.standard.string(forKey: LocalMenuLayout.cacheKey)
+                    .flatMap { try? LocalMenuLayout.decode($0) }
+                configuration = MenuConfigurationSnapshot(configuration: cached?.configuration ?? LocalMenuLayout.baseConfiguration)
+            }
             DistributedNotificationCenter.default().addObserver(self, selector: #selector(receiveLocalLayout(_:)), name: LocalMenuLayout.changed, object: nil, suspensionBehavior: .deliverImmediately)
             requestLocalLayout()
             let timer = DispatchSource.makeTimerSource(queue: .main)
-            timer.schedule(deadline: .now() + 5, repeating: 5)
+            timer.schedule(deadline: .now() + 1, repeating: 2)
             timer.setEventHandler { [weak self] in self?.requestLocalLayout() }
             timer.resume(); refreshTimer = timer
             refreshLocalScope()
@@ -67,9 +83,14 @@ final class FinderSync: FIFinderSync {
     deinit { sources.forEach { $0.cancel() }; refreshTimer?.cancel(); NSWorkspace.shared.notificationCenter.removeObserver(self); DistributedNotificationCenter.default().removeObserver(self) }
 
     private func requestLocalLayout() {
+        if authenticatedLocal {
+            Task { @MainActor [weak self] in await self?.refreshAuthenticatedMenu() }
+            return
+        }
         DistributedNotificationCenter.default().postNotificationName(LocalMenuLayout.requested, object: nil, userInfo: nil, deliverImmediately: true)
     }
     @objc private func receiveLocalLayout(_ notification: Notification) {
+        if authenticatedLocal { requestLocalLayout(); return }
         guard localMode, let payload = notification.object as? String,
               let layout = try? LocalMenuLayout.decode(payload) else { return }
         // Only fixed built-in IDs and two presentation preferences cross this
@@ -82,6 +103,29 @@ final class FinderSync: FIFinderSync {
             self.configuration = snapshot
             UserDefaults.standard.set(payload, forKey: LocalMenuLayout.cacheKey)
             self.logger.notice("Local menu layout updated; top-level count: \(layout.topLevelEntryIDs.count)")
+        }
+    }
+
+    @MainActor private func refreshAuthenticatedMenu() async {
+        guard !refreshingLocal, let identity = LocalXPCIdentity() else { return }
+        refreshingLocal = true
+        defer { refreshingLocal = false }
+        if localClient == nil { localClient = LocalXPCClient(identity: identity) }
+        do {
+            guard let state = try await localClient?.menuState() else { return }
+            if configuration != state.configuration {
+                configuration = state.configuration
+                if let data = try? WireCodec.encoder().encode(configuration) {
+                    UserDefaults.standard.set(data, forKey: LocalFinderMenuState.cacheKey)
+                }
+            }
+            pendingMove = state.pendingMove
+            pendingClipboardChangeCount = state.pasteboardChangeCount
+            configurationError = !configuration.available
+        } catch {
+            pendingMove = nil; pendingClipboardChangeCount = nil
+            // Cached display metadata remains useful while the host is closed.
+            // Any actual action wakes and validates against current host state.
         }
     }
 
@@ -150,6 +194,10 @@ final class FinderSync: FIFinderSync {
     override func menu(for menuKind: FIMenuKind) -> NSMenu? {
         invocations = invocations.filter { $0.value.expires > Date() }
         if invocations.count > 4096 { invocations.removeAll() }
+        if authenticatedLocal {
+            if pendingClipboardChangeCount != NSPasteboard.general.changeCount { pendingMove = nil }
+            requestLocalLayout() // asynchronous; never await IPC in this callback
+        }
         let start = ContinuousClock.now
         let controller = FIFinderSyncController.default()
         let entryPoint: EntryPoint
@@ -170,8 +218,8 @@ final class FinderSync: FIFinderSync {
         let container = target.map { FileReference(url: $0, kindHint: entryPoint == .container ? .directory : .unknown) }
         let context = ActionContext(entryPoint: entryPoint, container: container, selection: urls.map { FileReference(url: $0, kindHint: .unknown) })
         let menu = NSMenu(title: "RightMouse"); menu.autoenablesItems = false
-        if configurationError {
-            let message = NSMenuItem(title: "RightMouse 配置或共享目录不可用", action: nil, keyEquivalent: "")
+        if configurationError || (authenticatedLocal && !configuration.available) {
+            let message = NSMenuItem(title: authenticatedLocal ? "请打开 RightMouse 同步菜单设置" : "RightMouse 配置或共享目录不可用", action: nil, keyEquivalent: "")
             message.isEnabled = false; menu.addItem(message)
         }
         if (paths != nil || localMode), !configurationError {
@@ -224,12 +272,7 @@ final class FinderSync: FIFinderSync {
         if localMode {
             do {
                 _ = try RequestValidator.decode(WireCodec.encoder().encode(request))
-                let url = try LocalFinderRequest.encode(request, localModeEnabled: localMode)
-                if case let .copyText(format) = request.action {
-                    let urls = invocation.context.selection.isEmpty ? [invocation.context.container!.url] : invocation.context.selection.map(\.url)
-                    NSPasteboard.general.clearContents()
-                    guard NSPasteboard.general.setString(PathText.format(urls, as: format), forType: .string) else { throw CommandFailure(.ioFailed, "无法写入剪贴板") }
-                } else if let identity = LocalXPCIdentity() {
+                if let identity = LocalXPCIdentity() {
                     Task { @MainActor [weak self] in
                         guard let self else { return }
                         if self.localClient == nil { self.localClient = LocalXPCClient(identity: identity) }
@@ -238,7 +281,14 @@ final class FinderSync: FIFinderSync {
                             NSSound.beep(); self?.openHost(dispatchURL: nil)
                         })
                     }
-                } else { openHost(dispatchURL: url) }
+                } else {
+                    let url = try LocalFinderRequest.encode(request, localModeEnabled: localMode)
+                    if case let .copyText(format) = request.action {
+                        let urls = invocation.context.selection.isEmpty ? [invocation.context.container!.url] : invocation.context.selection.map(\.url)
+                        NSPasteboard.general.clearContents()
+                        guard NSPasteboard.general.setString(PathText.format(urls, as: format), forType: .string) else { throw CommandFailure(.ioFailed, "无法写入剪贴板") }
+                    } else { openHost(dispatchURL: url) }
+                }
             } catch {
                 logger.error("Local request rejected: \(error.localizedDescription, privacy: .public)")
                 NSSound.beep(); openHost(dispatchURL: nil)

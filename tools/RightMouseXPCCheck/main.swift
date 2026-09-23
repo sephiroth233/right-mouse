@@ -20,11 +20,19 @@ import Darwin
             connection.remoteObjectInterface = NSXPCInterface(with: LocalFinderService.self)
             connection.setCodeSigningRequirement(identity.requirement("cn.rightmouse.RightMouse"))
             connection.resume(); defer { connection.invalidate() }
-            if mode != "no-handshake" {
+            if mode != "no-handshake" && mode != "menu-no-handshake" {
                 let response: String = try await LocalXPCCall.invoke(connection) { proxy, reply in
                     (proxy as! LocalFinderService).handshake(nonce, reply: reply)
                 }
                 guard response == LocalXPCIdentity.response(nonce) else { throw LocalXPCError.rejected }
+            }
+            if mode == "menu" || mode == "menu-no-handshake" {
+                let data: Data = try await LocalXPCCall.invoke(connection) { proxy, reply in
+                    (proxy as! LocalFinderService).menuState(reply: reply)
+                }
+                guard !data.isEmpty else { print("REJECTED"); exit(2) }
+                _ = try LocalFinderMenuState.decode(data)
+                print(String(decoding: data, as: UTF8.self)); return
             }
             if mode == "ping" { print("PASS authenticated host handshake"); return }
             guard CommandLine.arguments.count == 3 else { exit(64) }

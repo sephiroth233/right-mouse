@@ -6,7 +6,7 @@ struct MenuSettingsView: View {
     @ObservedObject var model: AppModel
     @ViewState private var previewSelection = true
     private var effectiveConfiguration: AppConfiguration {
-        model.isLocalFinderMode ? LocalMenuLayout(configuration: model.configuration).configuration : model.configuration
+        model.isLocalFinderMode && !model.authenticatedXPCBuild ? LocalMenuLayout(configuration: model.configuration).configuration : model.configuration
     }
     private var candidates: [MenuEntry] {
         var configuration = effectiveConfiguration
@@ -32,7 +32,7 @@ struct MenuSettingsView: View {
                             TopLevelMenuChoice(entry: entry, model: model)
                         }
                     }
-                    if !model.isLocalFinderMode {
+                    if !model.isLocalFinderMode || model.authenticatedXPCBuild {
                         Section("操作开关、排序与分组") {
                         ForEach(Array(model.configuration.actions.enumerated()), id: \.element.id) { index, action in
                             VStack(alignment: .leading, spacing: 6) {
@@ -59,7 +59,7 @@ struct MenuSettingsView: View {
                         ForEach(preview) { entry in MenuPreviewRow(entry: entry, integrations: model.configuration.integrations) }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
                 }.rightMouseGlass(radius: 16)
-                Text(model.isLocalFinderMode ? "本机模式支持内置菜单的一级显示和收起设置，通常立即生效；若未更新，请稍候约 5 秒后重新右键查看。自定义模板、应用和分组暂不同步。最终位置由 Finder 决定。" : "与 Finder 共用菜单规则；没有待移动文件时不显示粘贴。系统菜单中的最终位置由 Finder 决定。").font(.caption).foregroundStyle(.secondary)
+                Text(model.isLocalFinderMode && !model.authenticatedXPCBuild ? "开发构建只支持内置菜单。完整菜单请使用本机预览版。" : "设置会自动同步到 Finder，重新右键即可查看；没有有效剪切文件时不显示粘贴。系统菜单中的最终位置由 Finder 决定。").font(.caption).foregroundStyle(.secondary)
             }.frame(minWidth: 205, idealWidth: 225, maxWidth: 245)
         }.padding(.horizontal, 28).padding(.bottom, 24)
     }

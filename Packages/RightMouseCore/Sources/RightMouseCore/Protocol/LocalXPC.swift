@@ -10,6 +10,7 @@ import Foundation
 @objc public protocol LocalFinderService {
     func handshake(_ nonce: String, reply: @escaping (String) -> Void)
     func perform(_ payload: Data, reply: @escaping (Bool) -> Void)
+    func menuState(reply: @escaping (Data) -> Void)
 }
 
 /// Immutable build identity. A certificate fingerprint is a requirement, never a

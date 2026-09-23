@@ -17,14 +17,17 @@ public struct SavedLocation: Codable, Identifiable, Equatable, Sendable {
     public var name: String
     public var path: String
     public var bookmarkData: Data?
+    /// Missing in older configurations means an app-scoped bookmark.
+    public var securityScoped: Bool?
     public var order: Int
-    public init(id: UUID = UUID(), name: String, path: String, bookmarkData: Data? = nil, order: Int = 0) {
-        self.id = id; self.name = name; self.path = path; self.bookmarkData = bookmarkData; self.order = order
+    public init(id: UUID = UUID(), name: String, path: String, bookmarkData: Data? = nil, order: Int = 0, securityScoped: Bool? = nil) {
+        self.id = id; self.name = name; self.path = path; self.bookmarkData = bookmarkData; self.order = order; self.securityScoped = securityScoped
     }
     public func resolve() throws -> URL {
         if let data = bookmarkData {
             var stale = false
-            let url = try URL(resolvingBookmarkData: data, options: [.withSecurityScope, .withoutUI], relativeTo: nil, bookmarkDataIsStale: &stale)
+            let options: URL.BookmarkResolutionOptions = securityScoped == false ? [.withoutUI, .withoutMounting] : [.withSecurityScope, .withoutUI]
+            let url = try URL(resolvingBookmarkData: data, options: options, relativeTo: nil, bookmarkDataIsStale: &stale)
             guard !stale else { throw ConfigurationError.invalid("目录书签已失效，请重新选择目录。") }
             return url
         }

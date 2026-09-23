@@ -41,6 +41,9 @@ try:
     for name in ['valid','rogue','wrong-role','no-lookup']:
         result=client(name)
         check(name+' identity/lookup boundary', result.returncode == (0 if name=='valid' else 3))
+    check('menu read before handshake rejected',client('valid','menu-no-handshake').returncode==2)
+    menu=client('valid','menu')
+    check('authenticated full menu readable',menu.returncode==0 and 'templates' in json.loads(menu.stdout)['configuration'])
     before=request('create','before-handshake.txt')
     check('operation before handshake rejected',client('valid','no-handshake',before).returncode==2)
     check('no handshake has no file effect',not (fixture/'before-handshake.txt').exists())

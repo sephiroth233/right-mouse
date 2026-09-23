@@ -260,13 +260,14 @@ enum SetupExercisePhase: Equatable {
         panel.message = watched ? "选择需要显示 RightMouse 右键菜单的目录。" : "选择要收藏的目录。"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            let bookmark = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+            let scoped = !isLocalFinderMode
+            let bookmark = try url.bookmarkData(options: scoped ? .withSecurityScope : .withoutImplicitSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
             save { value in
                 var locations = watched ? value.watchedLocations : value.favorites
                 if let replacing, let index = locations.firstIndex(where: { $0.id == replacing }) {
-                    locations[index].path = url.path; locations[index].bookmarkData = bookmark
+                    locations[index].path = url.path; locations[index].bookmarkData = bookmark; locations[index].securityScoped = scoped
                 } else if !locations.contains(where: { $0.path == url.path }) {
-                    locations.append(SavedLocation(name: url.lastPathComponent, path: url.path, bookmarkData: bookmark, order: locations.count))
+                    locations.append(SavedLocation(name: url.lastPathComponent, path: url.path, bookmarkData: bookmark, order: locations.count, securityScoped: scoped))
                 }
                 if watched { value.watchedLocations = locations } else { value.favorites = locations }
             }
@@ -349,7 +350,7 @@ enum SetupExercisePhase: Equatable {
             let url = try item.resolve()
             destination = url; selectedRecentDestinationID = id
             _ = rememberDestination(url)
-            notice = "已将“\(item.name)”设为文件操作台的目标目录。"
+            notice = "已将“\(item.name)”设为目标目录。"
             return true
         } catch {
             recentDestinationIssues[id] = error.localizedDescription
