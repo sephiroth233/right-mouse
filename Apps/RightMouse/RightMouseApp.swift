@@ -8,6 +8,9 @@ import OSLog
 enum RightMouseApplication {
     @MainActor static func main() {
         let app = NSApplication.shared
+        // Publish the brand before regular activation creates Dock/Stage Manager
+        // entries; setting it after launch can leave their initial placeholder.
+        if let icon = AppIcons.brand { app.applicationIconImage = icon }
         let delegate = ApplicationDelegate()
         app.delegate = delegate
         app.setActivationPolicy(.regular)
@@ -33,7 +36,6 @@ enum RightMouseApplication {
         application(NSApplication.shared, open: [url])
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if let icon = AppIcons.brand { NSApp.applicationIconImage = icon }
         installMenu()
         do {
             controller = try HostController()
