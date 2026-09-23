@@ -39,6 +39,11 @@ struct RootView: View {
     @ObservedObject var model: AppModel
     @ViewState private var page: SettingsPage? = .general
     var body: some View {
+        GeometryReader { viewport in
+            content.frame(width: viewport.size.width, height: viewport.size.height, alignment: .topLeading)
+        }
+    }
+    private var content: some View {
         HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 10) {
@@ -95,8 +100,10 @@ struct RootView: View {
                     case .diagnostics: DiagnosticsSettingsView(model: model)
                     case .tasks: TasksView(model: model)
                     }
-                }.frame(maxWidth: 960, maxHeight: .infinity)
+                }.frame(minWidth: 0, maxWidth: 960, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
                     .frame(maxWidth: .infinity)
+                    .clipped()
+                    .scrollIndicators(.visible, axes: .vertical)
                     .scrollContentBackground(.hidden)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -105,7 +112,6 @@ struct RootView: View {
         .padding(16)
         .background(RightMouseBackdrop())
         .groupBoxStyle(RightMouseGroupBoxStyle())
-        .frame(idealWidth: 960, idealHeight: 650)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in model.refreshDiagnostics() }
         .alert("操作未完成", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) { Button("好", role: .cancel) { model.errorMessage = nil } } message: { Text(model.errorMessage ?? "") }
     }

@@ -10,6 +10,7 @@
 - [2. 验证结果](#2-验证结果)
 - [3. 未完成验收](#3-未完成验收)
 - [4. 标题栏背景修复](#4-标题栏背景修复)
+- [5. 固定窗口与右侧滚动](#5-固定窗口与右侧滚动)
 - [参考](#参考)
 
 ## 1. 样式与窗口规则
@@ -53,9 +54,22 @@ macOS 26 及以上在导航面板和菜单预览采用 SwiftUI 原生 `glassEffe
 
 原生通道本次可以读取控件并操作页面，但截图工具仍只返回 Stage Manager 缩略图，不能据此声称完整分辨率视觉、VoiceOver 或多屏验收通过。用户提供的原截图是问题证据；修复后的完整视觉效果继续由当前打开的应用验收。
 
+## 5. 固定窗口与右侧滚动
+
+2026-09-23，用户继续反馈侧栏切页后窗口被拉长，并明确要求右侧内容过长时使用竖向滚动条，而非强求一页显示。该要求已补入 NFR-005 与 AC-029。
+
+NSHostingController 默认 sizingOptions 为 standardBounds，会根据 SwiftUI 内容更新窗口 contentMinSize/contentMaxSize。原页面的 Form、列表和最小高度在切换时参与窗口边界约束，导致应用主动扩张窗口。设置窗口与独立任务窗口现在均设置 sizingOptions 为 []，由 WindowLayout 管理初始尺寸和最小尺寸，仍允许用户手动调整。
+
+RootView 使用 GeometryReader 取得窗口现有内容区域，页面在该区域内布局；移除根视图的 idealHeight 和任务内容强制的 320 pt 最小高度。右侧页面可以压缩到现有可用高度，限制绘制边界并启用竖向滚动指示；各页沿用已有 ScrollView、Form 或 List 承载长内容，避免把可滚动列表再嵌入另一层全页滚动。左侧导航和右侧标题不参与正文滚动。
+
+重新执行 scripts/package-app.sh --development 成功，宿主、嵌入扩展与开发签名结构校验通过。当前开发包 SHA-256：`9a288122be501513e66dc252c6c32c7a940180781528a0d7b5c861ad317e6b4d`。没有修改文件服务，未重复执行无关的文件/协议回归。
+
+实际 UI 检查：先确认任务列表为空，再退出旧版本并通过原生工具打开新构建。通用页提供竖向滚动条，向下滚动后数值为 1，回到顶部后为 0；标题、导航和四个引导步骤仍在辅助功能树中。开始逐页切换检查时自动化通道报 native pipe closed，重新连接也失败；只读进程检查确认新应用仍运行。未取得可靠窗口尺寸读数或完成十页切换实测，不将整个 AC-029 标记通过。已打开的应用留给用户继续验收。
+
 ## 参考
 
 - [更新后的设计方案](../../../docs/design-plan.md)
 - [验收清单](../checklists/acceptance.md)
 - [Apple：自定义视图应用 Liquid Glass](https://developer.apple.com/documentation/swiftui/applying-liquid-glass-to-custom-views)
 - [Apple：屏幕可用区域](https://developer.apple.com/documentation/appkit/nsscreen/visibleframe)
+- [Apple：NSHostingController sizingOptions](https://developer.apple.com/documentation/swiftui/nshostingcontroller/sizingoptions)

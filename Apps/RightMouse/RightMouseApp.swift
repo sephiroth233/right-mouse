@@ -57,7 +57,12 @@ enum RightMouseApplication {
         guard let controller else { return }
         if settingsWindow == nil {
             let window = NSWindow(contentRect: NSRect(origin: .zero, size: WindowLayout.settingsSize), styleMask: [.titled,.closable,.miniaturizable,.resizable], backing: .buffered, defer: false)
-            window.title = "RightMouse"; window.isReleasedWhenClosed = false; window.contentViewController = NSHostingController(rootView: RootView(model: controller.model))
+            window.title = "RightMouse"; window.isReleasedWhenClosed = false
+            let hosting = NSHostingController(rootView: RootView(model: controller.model))
+            // WindowLayout owns window bounds. Page-specific intrinsic sizes must
+            // not change contentMinSize/contentMaxSize when the sidebar changes.
+            hosting.sizingOptions = []
+            window.contentViewController = hosting
             WindowLayout.prepare(window, preferred: WindowLayout.settingsSize, minimum: WindowLayout.minimumSettingsSize)
             settingsWindow = window
         }
@@ -69,7 +74,9 @@ enum RightMouseApplication {
         if tasksWindow == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 560), styleMask: [.titled,.closable,.miniaturizable,.resizable], backing: .buffered, defer: false)
             window.title = "RightMouse 文件任务"; window.isReleasedWhenClosed = false
-            window.contentViewController = NSHostingController(rootView: TasksView(model: controller.model).padding(.top, 20).background(RightMouseBackdrop()).groupBoxStyle(RightMouseGroupBoxStyle()))
+            let hosting = NSHostingController(rootView: TasksView(model: controller.model).padding(.top, 20).background(RightMouseBackdrop()).groupBoxStyle(RightMouseGroupBoxStyle()))
+            hosting.sizingOptions = []
+            window.contentViewController = hosting
             WindowLayout.prepare(window, preferred: WindowLayout.tasksSize, minimum: NSSize(width: 600, height: 420))
             tasksWindow = window
         }
