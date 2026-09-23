@@ -16,14 +16,14 @@
 
 ## 安装
 
-当前提供 **0.2.2 本机预览版**，包含 Apple Silicon（arm64）和 Intel（x86_64）安装包。最低编译目标为 macOS 14；两个架构已通过 macOS 26 自动构建与检查，真实 Finder 交互在 macOS 27 上完成本机验证。
+当前提供 **0.2.3**，包含 Apple Silicon（arm64）和 Intel（x86_64）安装包。最低编译目标为 macOS 14；两个架构已通过 macOS 26 自动构建与检查，真实 Finder 交互在 macOS 27 上完成本机验证。
 
 1. 从 [发行版页面](https://github.com/sephiroth233/right-mouse/releases) 下载适合你的 Mac 的 DMG（M 系列选 `arm64`，Intel 选 `x86_64`），打开后将 **RightMouse.app** 拖入 **Applications（应用程序）**。
-2. 打开 RightMouse。当前版本未经过 Apple 公证；若系统阻止启动，可在「系统设置 → 隐私与安全性」中选择「仍要打开」。
+2. 打开 RightMouse。若系统阻止启动，可在「系统设置 → 隐私与安全性」中选择「仍要打开」。
 3. 在应用的「权限与诊断」中打开扩展设置，启用 **RightMouse Finder 扩展**。
 4. 确认应用显示「已连接」，在 Finder 的普通本地文件夹中右键即可使用。在「菜单管理」中调整常用操作的位置。
 
-使用本机版不需要 Apple Developer 账号。首次安装会自动配置当前用户的本机连接服务。
+首次安装会自动配置当前用户的 Finder 连接服务。
 
 **兼容范围**：当前右键菜单以普通本地目录为主。0.2.1 在本机 macOS 27 的 iCloud 云盘中未显示增强菜单，显式监控云盘目录的独立扩展也未生效；暂不承诺 iCloud 或其他云盘支持。详见 [iCloud 排查记录](docs/icloud-menu-investigation.md)。
 
@@ -40,7 +40,7 @@ python3 scripts/build-local-app.py
 scripts/package-local-app.sh --no-build
 ```
 
-生成的 DMG 位于 `dist/`。构建会为本机组件生成签名身份，无需开发者账号；生成的安装包仍属于未公证版本。
+生成的 DMG 位于 `dist/`。构建与签名机制见 [开发配置](Config/README.md)。
 
 ## 自动构建
 

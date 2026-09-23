@@ -1,6 +1,12 @@
 RightMouse 原生 macOS Finder 右键增强工具，本次提供 Apple Silicon 和 Intel 两种安装包。
 
-## 0.2.2 更新
+## 0.2.3 更新
+
+- 统一应用版本显示与发行名称，界面仅显示 RightMouse 和版本号。
+- 连接状态与诊断页面统一使用「Finder 连接」，移除方案标签与版本栏中的签名说明。
+- 安装包命名统一为 `RightMouse-版本号-架构.dmg`。
+
+## 0.2.2 功能更新
 
 - 新增 Finder 右键「服务」兼容入口：新建 TXT、新建 Markdown、复制完整路径、在终端中打开、使用 VS Code 打开。
 - 系统服务入口独立于 Finder Sync，可在本机 iCloud 云盘未显示增强菜单时使用；位置与显示开关由 macOS 管理。
@@ -15,8 +21,8 @@ RightMouse 原生 macOS Finder 右键增强工具，本次提供 Apple Silicon �
 
 | 你的 Mac | 安装包后缀 |
 | --- | --- |
-| Apple Silicon（M 系列） | `local-arm64.dmg` |
-| Intel | `local-x86_64.dmg` |
+| Apple Silicon（M 系列） | `arm64.dmg` |
+| Intel | `x86_64.dmg` |
 
 请在下方 Assets 中下载 DMG。`.sha256` 是对应校验文件，`build-info-*.json` 记录源码提交和构建环境。
 
@@ -37,6 +43,6 @@ RightMouse 原生 macOS Finder 右键增强工具，本次提供 Apple Silicon �
 
 详细安装、升级与排障步骤见 [安装说明](https://github.com/sephiroth233/right-mouse/blob/main/docs/local-install.md)。升级前退出应用，并替换整个应用包。
 
-## 版本状态
+## 系统要求与验证范围
 
-这是未经过 Apple 公证的本机预览版，使用和构建均不需要 Apple Developer 账号。最低编译目标为 macOS 14；两个架构已在 macOS 26 的 CI 上通过自动检查，此前真实 Finder 交互在 macOS 27 上完成本机验收；本次服务入口通过隔离预览验证，真实注销登录与其他系统环境仍需验收。
+最低编译目标为 macOS 14；两个架构已在 macOS 26 的 CI 上通过自动检查，此前真实 Finder 交互在 macOS 27 上完成本机验收；本次服务入口通过隔离预览验证，真实注销登录与其他系统环境仍需验收。

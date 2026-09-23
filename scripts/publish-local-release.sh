@@ -20,13 +20,13 @@ if existing=$(gh release view "$tag" --repo "$repo" --json isDraft --jq .isDraft
         exit 1
     fi
 else
-    gh release create "$tag" --repo "$repo" --verify-tag --draft --prerelease \
-        --title "RightMouse $tag · 本机预览版" --notes-file "$notes"
+    gh release create "$tag" --repo "$repo" --verify-tag --draft \
+        --title "RightMouse $tag" --notes-file "$notes"
 fi
 # Failed uploads leave a draft. A rerun can replace only draft assets.
 gh release upload "$tag" "${assets[@]}" --repo "$repo" --clobber
 remote_count=$(gh release view "$tag" --repo "$repo" --json assets --jq '.assets | length')
 test "$remote_count" -eq 6
-gh release edit "$tag" --repo "$repo" --draft=false --prerelease \
-    --title "RightMouse $tag · 本机预览版" --notes-file "$notes"
+gh release edit "$tag" --repo "$repo" --draft=false --prerelease=false \
+    --title "RightMouse $tag" --notes-file "$notes"
 gh release view "$tag" --repo "$repo" --json url --jq .url

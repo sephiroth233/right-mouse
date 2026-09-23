@@ -18,7 +18,7 @@ class ReleaseInputChecks(unittest.TestCase):
                 for arch in ['arm64', 'x86_64']:
                     folder = root / 'artifacts' / arch
                     folder.mkdir(parents=True)
-                    filename = f'RightMouse-0.2.0-local-{arch}.dmg'
+                    filename = f'RightMouse-0.2.0-{arch}.dmg'
                     data = b'fixture installer'
                     (folder / filename).write_bytes(data)
                     (folder / (filename + '.sha256')).write_text(hashlib.sha256(data).hexdigest() + '  ' + filename + '\n')

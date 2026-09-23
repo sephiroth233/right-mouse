@@ -73,7 +73,7 @@ final class FinderXPCListenerDelegate: NSObject, NSXPCListenerDelegate {
         listener.setConnectionCodeSigningRequirement(identity.requirement("cn.rightmouse.RightMouse.FinderExtension"))
         listener.delegate = delegate; listener.resume()
         controller.model.authenticatedXPCBuild = true
-        controller.model.storageDiagnostic = "本机连接服务通过身份校验连接 Finder 和主应用，不依赖 App Group。菜单配置与剪切状态自动同步，操作无需逐次确认来源；目录选择、访问授权和同名冲突仍会按需提示。"
+        controller.model.storageDiagnostic = "连接服务负责同步 Finder 与应用的设置。菜单配置与剪切状态自动同步，操作无需逐次确认来源；目录选择、访问授权和同名冲突仍会按需提示。"
         controller.model.onRepairLocalService = { [weak self] in self?.start(repair: true) }
         controller.model.onStopLocalService = { [weak self] in self?.stop() }
     }
@@ -82,7 +82,7 @@ final class FinderXPCListenerDelegate: NSObject, NSXPCListenerDelegate {
         do {
             if repair { UserDefaults.standard.removeObject(forKey: "RightMouseLocalServiceDisabled") }
             if UserDefaults.standard.bool(forKey: "RightMouseLocalServiceDisabled") {
-                model?.localServiceStatus = "本机连接服务已停用"; return
+                model?.localServiceStatus = "Finder 连接服务已停用"; return
             }
             try LocalServiceInstaller.install(identity: identity, force: repair)
             timer?.invalidate()
@@ -90,7 +90,7 @@ final class FinderXPCListenerDelegate: NSObject, NSXPCListenerDelegate {
                 Task { @MainActor in self?.connect() }
             }
             connect()
-        } catch { model?.localServiceStatus = "本机连接服务不可用：\(error.localizedDescription)" }
+        } catch { model?.localServiceStatus = "Finder 连接服务不可用：\(error.localizedDescription)" }
     }
     private func connect() {
         guard !stopped, !connecting, registration == nil else { return }
@@ -103,7 +103,7 @@ final class FinderXPCListenerDelegate: NSObject, NSXPCListenerDelegate {
             Task { @MainActor in
                 guard let self, self.generation == token else { return }
                 self.registration = nil; self.connecting = false; self.model?.localServiceReady = false
-                self.model?.localServiceStatus = self.stopped ? "本机连接服务已停用" : "正在重新连接本机服务…"
+                self.model?.localServiceStatus = self.stopped ? "Finder 连接服务已停用" : "正在重新连接 Finder 服务…"
             }
         }
         connection.interruptionHandler = { connection.invalidate() }
@@ -119,7 +119,7 @@ final class FinderXPCListenerDelegate: NSObject, NSXPCListenerDelegate {
                 guard let self, self.generation == token, !self.stopped else { connection.invalidate(); return }
                 guard accepted else { throw LocalXPCError.rejected }
                 self.connecting = false; self.model?.localServiceReady = true
-                self.model?.localServiceStatus = "本机连接已就绪，Finder 操作无需逐次确认来源。"
+                self.model?.localServiceStatus = "Finder 连接已就绪，Finder 操作无需逐次确认来源。"
                 self.logger.notice("Authenticated Finder endpoint registered")
             } catch { connection.invalidate() }
         }
@@ -128,7 +128,7 @@ final class FinderXPCListenerDelegate: NSObject, NSXPCListenerDelegate {
         stopped = true; timer?.invalidate(); timer = nil
         registration?.invalidate(); registration = nil; connecting = false
         UserDefaults.standard.set(true, forKey: "RightMouseLocalServiceDisabled")
-        do { try LocalServiceInstaller.uninstall(); model?.localServiceReady = false; model?.localServiceStatus = "本机连接服务已停用；设置已保留。" }
+        do { try LocalServiceInstaller.uninstall(); model?.localServiceReady = false; model?.localServiceStatus = "Finder 连接服务已停用；设置已保留。" }
         catch { model?.reportError(error) }
     }
 }
@@ -141,7 +141,7 @@ enum LocalServiceInstaller {
         let process = Process(); process.executableURL = URL(fileURLWithPath: "/bin/launchctl"); process.arguments = arguments
         process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice
         try process.run(); process.waitUntilExit()
-        if process.terminationStatus != 0 && !allowFailure { throw NSError(domain: "RightMouse.LocalService", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: "服务注册失败，请在权限与诊断中修复本机连接。"] ) }
+        if process.terminationStatus != 0 && !allowFailure { throw NSError(domain: "RightMouse.LocalService", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: "服务注册失败，请在权限与诊断中修复Finder 连接。"] ) }
         return process.terminationStatus
     }
     static func install(identity: LocalXPCIdentity, force: Bool) throws {

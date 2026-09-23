@@ -73,7 +73,7 @@ struct RootView: View {
                     Text(current.subtitle).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }.padding(.horizontal, 24).padding(.vertical, current == .menus ? 18 : 24)
                 if model.isDevelopmentStorage && !(current == .menus && model.localServiceReady) {
-                    Label(model.isLocalFinderMode ? (model.authenticatedXPCBuild ? model.localServiceStatus : "本机模式 · Finder 使用内置菜单，文件操作将在应用中确认。") : "开发模式 · Finder 菜单暂不可用，请使用本机发行版连接 Finder。", systemImage: model.localServiceReady ? "checkmark.shield" : "exclamationmark.triangle")
+                    Label(model.isLocalFinderMode ? (model.authenticatedXPCBuild ? model.localServiceStatus : "Finder 文件操作将在应用中确认。") : "Finder 菜单暂不可用，请检查应用安装与连接状态。", systemImage: model.localServiceReady ? "checkmark.shield" : "exclamationmark.triangle")
                         .font(.callout).fixedSize(horizontal: false, vertical: true)
                         .padding(12).background((model.localServiceReady ? Color.green : Color.orange).opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
                         .padding(.horizontal, 24).padding(.bottom, 12)
@@ -114,12 +114,12 @@ private struct GeneralSettingsView: View {
         Form {
             Section("开始使用") {
                 SetupStep(number: 1, title: "启用 Finder 扩展", subtitle: model.isLocalFinderMode ? (model.extensionEnabled ? "扩展已启用。请在普通本地目录右键使用已配置的菜单。" : "在系统设置中启用 RightMouse Finder 扩展。") : model.isDevelopmentStorage ? (model.extensionEnabled ? "扩展已登记，但共享通信不可用。" : "开发模式下共享通信不可用，Finder 菜单暂不可用。") : (model.extensionEnabled ? "扩展已启用，可继续选择覆盖目录。" : "在系统设置中启用 RightMouse Finder 扩展。"), complete: (!model.isDevelopmentStorage || model.isLocalFinderMode) && model.extensionEnabled) { model.showExtensionSettings() }
-                SetupStep(number: 2, title: "选择使用目录", subtitle: model.isLocalFinderMode ? "本机菜单覆盖普通本地目录；此处目录配置用于共享模式。" : "已配置 \(model.configuration.watchedLocations.count) 个目录；子文件夹一并覆盖。", complete: !model.configuration.watchedLocations.isEmpty) { navigate(.diagnostics) }
+                SetupStep(number: 2, title: "选择使用目录", subtitle: model.isLocalFinderMode ? "右键菜单覆盖普通本地目录；此处目录配置用于共享模式。" : "已配置 \(model.configuration.watchedLocations.count) 个目录；子文件夹一并覆盖。", complete: !model.configuration.watchedLocations.isEmpty) { navigate(.diagnostics) }
                 SetupExerciseView(model: model)
                 SetupStep(number: 4, title: "定制右键菜单", subtitle: model.isLocalFinderMode ? "选择常用操作放到 Finder 一级菜单，其余操作可收进子菜单。" : "新建文件、复制路径、剪切移动与打开方式。", complete: false) { navigate(.menus) }
             }
             if model.authenticatedXPCBuild {
-                Section("本机连接") {
+                Section("Finder 连接") {
                     Text(model.localServiceStatus).font(.callout)
                     HStack {
                         Button("启用或修复连接") { model.onRepairLocalService?() }
@@ -138,9 +138,7 @@ private struct GeneralSettingsView: View {
                 Toggle("将未置顶的操作收进 RightMouse 子菜单", isOn: model.binding(\.compactMenu))
             }.disabled(model.isReadOnly)
             Section {
-                LabeledContent("版本", value: (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0") + (model.authenticatedXPCBuild ? " · 本机版" : " · 开发版"))
-                Text(model.authenticatedXPCBuild ? "无需开发者账号。本机版未经过 Apple 公证，首次安装请按随包说明允许运行。" : "开发版用于本机验证。正式签名、公证和各系统兼容性以交付验证记录为准。")
-                    .font(.caption).foregroundStyle(.secondary)
+                LabeledContent("版本", value: (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"))
             }
         }.formStyle(.grouped)
     }
@@ -169,11 +167,11 @@ private struct DiagnosticsSettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 GroupBox {
-                    HStack { Label(model.isLocalFinderMode ? "本机 Finder 菜单（需实际验收）" : model.isDevelopmentStorage ? "开发模式：Finder 功能不可用" : (model.extensionEnabled ? "Finder 扩展已启用" : "Finder 扩展未启用"), systemImage: !model.isDevelopmentStorage && model.extensionEnabled ? "checkmark.circle.fill" : "exclamationmark.circle").foregroundStyle(!model.isDevelopmentStorage && model.extensionEnabled ? .green : .orange); Spacer(); Button("打开扩展设置") { model.showExtensionSettings() }; Button("刷新") { model.refreshDiagnostics() } }
+                    HStack { Label(model.isDevelopmentStorage && !model.isLocalFinderMode ? "Finder 功能暂不可用" : (model.extensionEnabled ? "Finder 扩展已启用" : "Finder 扩展未启用"), systemImage: (!model.isDevelopmentStorage || model.isLocalFinderMode) && model.extensionEnabled ? "checkmark.circle.fill" : "exclamationmark.circle").foregroundStyle((!model.isDevelopmentStorage || model.isLocalFinderMode) && model.extensionEnabled ? .green : .orange); Spacer(); Button("打开扩展设置") { model.showExtensionSettings() }; Button("刷新") { model.refreshDiagnostics() } }
                     Text(model.storageDiagnostic ?? "启用后，在下方配置的普通本地目录中打开 Finder 右键菜单。云盘位置的实际支持以系统与提供方验证结果为准。").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
                 }
                 if model.authenticatedXPCBuild {
-                    GroupBox("本机连接服务") {
+                    GroupBox("Finder 连接服务") {
                         VStack(alignment: .leading, spacing: 10) {
                             Label(model.localServiceStatus, systemImage: model.localServiceReady ? "checkmark.shield" : "exclamationmark.triangle")
                             HStack {

@@ -29,8 +29,8 @@ for path in metadata_files:
         parser.error('Artifacts must contain one arm64 and one x86_64 build.')
     architectures.add(arch)
     if info.get('commit') != args.commit or info.get('version') != version or info.get('notarized') is not False:
-        parser.error(f'{arch}: source commit, version or local-preview type does not match.')
-    filename = f'RightMouse-{version}-local-{arch}.dmg'
+        parser.error(f'{arch}: source commit, version or signing metadata does not match.')
+    filename = f'RightMouse-{version}-{arch}.dmg'
     dmg = path.parent / filename
     checksum = path.parent / (filename + '.sha256')
     for source in [path, dmg, checksum]:

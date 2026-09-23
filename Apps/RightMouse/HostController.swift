@@ -232,7 +232,7 @@ import Darwin
             guard let app = model.configuration.integrations.first(where: { $0.id == id && $0.enabled }) else { throw CommandFailure(.appUnavailable, "该打开方式未启用") }
             lines.append("操作：使用 \(quoted(app.name)) 打开\(mode == .directory ? "目录" : "文件")")
             lines.append("应用：\(quoted(app.applicationPath ?? app.bundleID))")
-        default: throw CommandFailure(.invalidRequest, "本机菜单不支持此操作")
+        default: throw CommandFailure(.invalidRequest, "右键菜单不支持此操作")
         }
         if let container = request.context.container { lines.append("Finder 位置：\(quoted(container.url.path))") }
         lines.append("选中项目：\(request.context.selection.count) 个")
