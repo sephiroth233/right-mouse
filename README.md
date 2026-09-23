@@ -48,6 +48,7 @@ open .build/native/RightMouse.app
 - 损坏操作记录保留原件并生成受容量限制的去重原始副本；核对页展示暂存占用，对归属和授权均有效的孤立暂存提供显式清理。
 - 复制、移动及撤销提交后再次核对对象；跨卷来源先隔离再验证清理，异常时在恢复页显示保留副本位置。
 - 独立品牌应用图标、统一功能符号与 Terminal/VS Code 应用小图标，覆盖设置页及 Finder 菜单。
+- 菜单编辑器提供逐项显示位置、分类折叠、搜索筛选、批量设置与一级排序；预览按真实层级浏览。
 - 液态玻璃导航与预览，主窗口默认 960×680 pt，在当前屏幕居中；旧系统与减少透明度模式提供材质降级。
 
 首次使用需在系统设置中启用 Finder 扩展。本机模式的菜单覆盖普通本地目录与挂载卷；共享模式需在应用中选择使用目录，扩展仅对配置目录提供菜单。目录授权来自系统选择器；配置中的路径文字本身不代表授权。
@@ -71,7 +72,7 @@ flowchart LR
 
 ## 当前验证边界
 
-当前移除常用目录版本通过 370 项核心夹具和 472 项宿主检查；完整菜单接入阶段另通过 18 项真实 XPC 检查，见[完整菜单与设置精简验收](specs/001-finder-core/evidence/EV-full-finder-menu-001.md)。历史 341 项核心夹具检查、408 项宿主侧检查通过，最新宿主回归见[剪切与协议验证](specs/001-finder-core/evidence/EV-clipboard-protocol-001.md)，核心证据见[来源隔离修复](specs/001-finder-core/evidence/EV-source-isolation-001.md)。另有 15 项[真实 APFS 双卷检查](specs/001-finder-core/evidence/EV-real-volume-001.md)通过，包括跨卷复制/移动、元数据、取消保源和真实 ENOSPC。宿主与嵌入扩展已实际编译，开发签名结构验证通过；Finder 登记和进程加载证据见[接入记录](Config/validation/finder-load-2026-09-22.md)。此前系统日志确认 ad-hoc 的 App Group 访问被拒绝；最新本机模式已移除该依赖，真实 Finder 菜单 → 宿主确认 → TXT 创建及同名保留、冷启动已取得证据，见[本机模式验收](specs/001-finder-core/evidence/EV-local-finder-001.md)。
+当前可视化菜单编辑版本通过 384 项核心、472 项宿主与 18 项真实 XPC 检查；实际 Finder 菜单、界面及 DMG 安装验证见[菜单管理验收](specs/001-finder-core/evidence/EV-menu-editor-001.md)。历史 341 项核心夹具检查、408 项宿主侧检查通过，最新宿主回归见[剪切与协议验证](specs/001-finder-core/evidence/EV-clipboard-protocol-001.md)，核心证据见[来源隔离修复](specs/001-finder-core/evidence/EV-source-isolation-001.md)。另有 15 项[真实 APFS 双卷检查](specs/001-finder-core/evidence/EV-real-volume-001.md)通过，包括跨卷复制/移动、元数据、取消保源和真实 ENOSPC。宿主与嵌入扩展已实际编译，开发签名结构验证通过；Finder 登记和进程加载证据见[接入记录](Config/validation/finder-load-2026-09-22.md)。此前系统日志确认 ad-hoc 的 App Group 访问被拒绝；最新本机模式已移除该依赖，真实 Finder 菜单 → 宿主确认 → TXT 创建及同名保留、冷启动已取得证据，见[本机模式验收](specs/001-finder-core/evidence/EV-local-finder-001.md)。
 
 尚未完整通过：真实 Finder 全部上下文及操作矩阵、所有权限撤回场景、外置卷拔出及其他文件系统、最低 macOS 版本、完整键盘与 VoiceOver 验收、Developer ID 签名及公证。当前机器没有有效分发证书，也未安装完整 Xcode。隔离 APFS 镜像通过不等于外置设备故障通过，开发包不等于已公证发行版。
 
