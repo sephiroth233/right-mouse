@@ -177,6 +177,18 @@ import Darwin
         } catch { model.reportError(error); return false }
     }
 
+    /// Called only by the signature-gated XPC listener, after its handshake.
+    /// The legacy external URL entry point above retains its explicit confirmation.
+    @discardableResult func receiveAuthenticatedFinderData(_ data: Data) -> Bool {
+        guard allowsLocalFinderRequests, data.count <= LocalFinderRequest.maximumURLBytes else { return false }
+        do {
+            guard let text = String(data: data, encoding: .utf8), let url = URL(string: text) else { return false }
+            let request = try LocalFinderRequest.decode(url, localModeEnabled: true)
+            _ = try localFinderDetails(request)
+            return submit(request, interactive: true)
+        } catch { model.reportError(error); return false }
+    }
+
     private func localFinderDetails(_ request: CommandRequest) throws -> String {
         // JSON string escaping makes embedded newlines/control characters visible.
         func quoted(_ value: String) -> String {

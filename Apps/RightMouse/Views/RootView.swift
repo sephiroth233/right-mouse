@@ -79,7 +79,7 @@ struct RootView: View {
                     Text(current.subtitle).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }.padding(24)
                 if model.isDevelopmentStorage {
-                    Label(model.isLocalFinderMode ? "本机模式 · Finder 使用内置菜单，文件操作将在应用中确认。" : "开发模式 · Finder 菜单暂不可用。可在文件操作台使用本地功能。", systemImage: "exclamationmark.triangle")
+                    Label(model.isLocalFinderMode ? (model.authenticatedXPCBuild ? model.localServiceStatus : "本机模式 · Finder 使用内置菜单，文件操作将在应用中确认。") : "开发模式 · Finder 菜单暂不可用。可在文件操作台使用本地功能。", systemImage: "exclamationmark.triangle")
                         .font(.callout).fixedSize(horizontal: false, vertical: true)
                         .padding(12).background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
                         .padding(.horizontal, 24).padding(.bottom, 12)
@@ -189,6 +189,18 @@ private struct DiagnosticsSettingsView: View {
                 GroupBox {
                     HStack { Label(model.isLocalFinderMode ? "本机 Finder 菜单（需实际验收）" : model.isDevelopmentStorage ? "开发模式：Finder 功能不可用" : (model.extensionEnabled ? "Finder 扩展已启用" : "Finder 扩展未启用"), systemImage: !model.isDevelopmentStorage && model.extensionEnabled ? "checkmark.circle.fill" : "exclamationmark.circle").foregroundStyle(!model.isDevelopmentStorage && model.extensionEnabled ? .green : .orange); Spacer(); Button("打开扩展设置") { model.showExtensionSettings() }; Button("刷新") { model.refreshDiagnostics() } }
                     Text(model.storageDiagnostic ?? "启用后，在下方配置的普通本地目录中打开 Finder 右键菜单。云盘位置的实际支持以系统与提供方验证结果为准。").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
+                }
+                if model.authenticatedXPCBuild {
+                    GroupBox("本机连接服务") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Label(model.localServiceStatus, systemImage: model.localServiceReady ? "checkmark.shield" : "exclamationmark.triangle")
+                            HStack {
+                                Button("启用或修复连接") { model.onRepairLocalService?() }
+                                Button("停用并移除服务") { model.onStopLocalService?() }
+                            }
+                            Text("停用后 Finder 文件操作将不可用；应用内操作、设置和任务记录会保留。删除应用前可先在这里移除服务。").font(.caption).foregroundStyle(.secondary)
+                        }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                    }
                 }
                 Text("右键菜单覆盖目录").font(.headline)
                 LocationSettingsView(model: model, watched: true)

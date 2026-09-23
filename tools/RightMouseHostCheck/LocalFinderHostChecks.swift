@@ -50,6 +50,49 @@ private struct LocalFinderHostFailure: Error, CustomStringConvertible { let desc
         throw LocalFinderHostFailure(description: "local Finder fixture request timed out")
     }
     do {
+        let (paths, target) = try fixture("authenticated-xpc")
+        var confirmations = 0
+        let host = try HostController(storagePaths: paths, pasteboard: board, allowsLocalFinderRequests: true,
+                                      confirmLocalFinderRequest: { _, _ in confirmations += 1; return false })
+        let request = create(target)
+        let payload = Data(try link(request).absoluteString.utf8)
+        try check(host.receiveAuthenticatedFinderData(payload) && confirmations == 0, "authenticated transport enters ledger without URL confirmation")
+        let completed = try await receipt(paths, request.requestID)
+        try check(completed.status == .completed && fm.fileExists(atPath: target.appendingPathComponent("created.txt").path), "authenticated creation completes through existing engine")
+        try check(host.receiveAuthenticatedFinderData(payload), "authenticated duplicate request returns existing receipt")
+        try check(try fm.contentsOfDirectory(atPath: target.path).count == 1, "authenticated duplicate cannot create a second file")
+        try check(!host.receiveLocalFinderURL(try link(request)) && confirmations == 1, "external URL still needs confirmation even for an existing authenticated request")
+        let old = Data(try link(create(target, now: Date().addingTimeInterval(-300))).absoluteString.utf8)
+        try check(!host.receiveAuthenticatedFinderData(old), "authenticated stale request rejected")
+        try check(!host.receiveAuthenticatedFinderData(Data(repeating: 65, count: LocalFinderRequest.maximumURLBytes + 1)), "authenticated oversized payload rejected")
+        try check(!host.receiveAuthenticatedFinderData(Data("not-a-request".utf8)), "authenticated malformed payload rejected")
+        host.model.isReadOnly = true
+        try check(!host.receiveAuthenticatedFinderData(Data(try link(create(target)).absoluteString.utf8)), "authenticated transport respects read-only mode")
+    }
+    do {
+        var received = 0, accepted = true
+        let before = FinderXPCSession { _, reply in received += 1; reply(true) }
+        before.perform(Data()) { accepted = $0 }
+        try check(!accepted && received == 0, "XPC perform before handshake is rejected")
+        let session = FinderXPCSession { _, reply in received += 1; reply(true) }
+        var response = ""
+        session.handshake("bad") { response = $0 }
+        try check(response.isEmpty, "XPC malformed nonce rejected")
+        let nonce = UUID().uuidString
+        session.handshake(nonce) { response = $0 }
+        try check(response == LocalXPCIdentity.response(nonce), "XPC handshake echoes version and nonce")
+        session.perform(Data()) { accepted = $0 }
+        try check(accepted && received == 1, "handshaken session accepts one payload")
+        session.perform(Data()) { accepted = $0 }
+        try check(!accepted && received == 1, "session refuses a second operation")
+        session.handshake(UUID().uuidString) { response = $0 }
+        try check(response.isEmpty, "consumed session cannot be rearmed")
+        let oversized = FinderXPCSession { _, reply in received += 1; reply(true) }
+        oversized.handshake(UUID().uuidString) { _ in }
+        oversized.perform(Data(repeating: 0, count: LocalFinderRequest.maximumURLBytes + 1)) { accepted = $0 }
+        try check(!accepted && received == 1, "session size limit precedes host dispatch")
+    }
+    do {
         let (paths, target) = try fixture("disabled")
         var confirmations = 0
         let host = try HostController(storagePaths: paths, pasteboard: board, allowsLocalFinderRequests: false,

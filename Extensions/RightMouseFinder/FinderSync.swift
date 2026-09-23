@@ -21,6 +21,7 @@ final class FinderSync: FIFinderSync {
     private var sources: [DispatchSourceFileSystemObject] = []
     private var refreshTimer: DispatchSourceTimer?
     private var configurationError = false
+    private var localClient: LocalXPCClient?
     private let localMode = Bundle.main.object(forInfoDictionaryKey: "RightMouseLocalFinderMode") as? Bool == true
     private var invocations: [Int: (value: MenuInvocation, expires: Date)] = [:]
     private var nextInvocationTag = 1
@@ -227,6 +228,15 @@ final class FinderSync: FIFinderSync {
                     let urls = invocation.context.selection.isEmpty ? [invocation.context.container!.url] : invocation.context.selection.map(\.url)
                     NSPasteboard.general.clearContents()
                     guard NSPasteboard.general.setString(PathText.format(urls, as: format), forType: .string) else { throw CommandFailure(.ioFailed, "无法写入剪贴板") }
+                } else if let identity = LocalXPCIdentity() {
+                    Task { @MainActor [weak self] in
+                        guard let self else { return }
+                        if self.localClient == nil { self.localClient = LocalXPCClient(identity: identity) }
+                        self.localClient?.send(request, wakeHost: { [weak self] in self?.openHost(dispatchURL: URL(string: "rightmouse://wake")) }, failure: { [weak self] in
+                            self?.logger.error("Authenticated Finder request unavailable; check tasks before retrying")
+                            NSSound.beep(); self?.openHost(dispatchURL: nil)
+                        })
+                    }
                 } else { openHost(dispatchURL: url) }
             } catch {
                 logger.error("Local request rejected: \(error.localizedDescription, privacy: .public)")
@@ -260,7 +270,7 @@ final class FinderSync: FIFinderSync {
               plugins.lastPathComponent == "PlugIns", contents.lastPathComponent == "Contents", host.pathExtension == "app" else {
             logger.error("Embedding host layout mismatch"); return
         }
-        let options = NSWorkspace.OpenConfiguration(); options.activates = localMode || dispatchURL == nil
+        let options = NSWorkspace.OpenConfiguration(); options.activates = dispatchURL?.host == "wake" ? false : (localMode || dispatchURL == nil)
         if let dispatchURL {
             NSWorkspace.shared.open([dispatchURL], withApplicationAt: host, configuration: options) { [weak self] _, error in
                 if error != nil { self?.logger.error("Host wake failed; queued request retained") }

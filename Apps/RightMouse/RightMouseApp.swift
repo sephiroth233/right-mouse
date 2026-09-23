@@ -21,6 +21,7 @@ enum RightMouseApplication {
 
 @MainActor final class ApplicationDelegate: NSObject, NSApplicationDelegate {
     private var controller: HostController?
+    private var localXPC: LocalXPCController?
     private var settingsWindow: NSWindow?
     private var tasksWindow: NSWindow?
     private var statusItem: NSStatusItem?
@@ -49,6 +50,10 @@ enum RightMouseApplication {
             }
             controller?.showTasks = { [weak self] in self?.showTasks() }
             controller?.scanInbox()
+            if let controller, let identity = LocalXPCIdentity() {
+                localXPC = LocalXPCController(identity: identity, controller: controller)
+                localXPC?.start()
+            }
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
             item.button?.image = NSImage(systemSymbolName: "cursorarrow.click.2", accessibilityDescription: "RightMouse")
             let menu = NSMenu()
@@ -59,7 +64,7 @@ enum RightMouseApplication {
             let waiting = startupURLs; startupURLs.removeAll()
             if !waiting.isEmpty { self.application(NSApplication.shared, open: waiting) }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-                guard let self, !self.receivedDispatch else { return }
+                guard let self, !self.receivedDispatch, !CommandLine.arguments.contains("--finder-wake") else { return }
                 self.showSettings()
             }
         } catch {
@@ -70,6 +75,7 @@ enum RightMouseApplication {
         logger.notice("Received URL event, count: \(urls.count)")
         guard let controller else { startupURLs.append(contentsOf: urls.prefix(max(0, 8 - startupURLs.count))); return }
         for url in urls {
+            if url.scheme == "rightmouse", url.host == "wake", url.query == nil, url.fragment == nil { receivedDispatch = true; continue }
             if url.scheme == "rightmouse", url.host == "settings", url.query == nil, url.fragment == nil { showSettings(); continue }
             receivedDispatch = true
             if url.host == "local-action" { controller.receiveLocalFinderURL(url); continue }
