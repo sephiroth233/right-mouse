@@ -14,10 +14,13 @@ enum WindowLayout {
     }
 
     @MainActor static func prepare(_ window: NSWindow, preferred: NSSize, minimum: NSSize) {
-        window.titlebarAppearsTransparent = true
+        // The hosting view occupies only the content rect. A clear titlebar and
+        // clear window leave the traffic lights floating above that background.
+        // Keep native window chrome; glass is provided inside the content area.
+        window.titlebarAppearsTransparent = false
         window.titleVisibility = .hidden
-        window.backgroundColor = .clear
-        window.isOpaque = false
+        window.backgroundColor = .windowBackgroundColor
+        window.isOpaque = true
         window.hasShadow = true
         if let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }) ?? NSScreen.main {
             window.setFrame(centeredFrame(preferred: preferred, visibleFrame: screen.visibleFrame), display: false)
