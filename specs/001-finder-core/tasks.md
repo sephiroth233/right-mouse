@@ -80,3 +80,9 @@
 - [实施方案](plan.md)
 - [验收清单](checklists/acceptance.md)
 - [Apple 分发流程](https://developer.apple.com/documentation/xcode/distributing-your-app-for-beta-testing-and-releases)
+
+## 2026-09-23 静默操作变更
+
+- [ ] S1 移除全部自动任务弹窗及历史入口；保留独立冲突/失败提示和手动异常核对。
+- [ ] S2 将正常终态记录改为请求失效后的临时状态清理；覆盖启动、运行中清理和重复请求，删除旧的逐操作诊断事件。
+- [ ] S3 回归新建、复制文本、打开、剪切粘贴、重名和异常保全；构建本机预览包并记录验证结果。
