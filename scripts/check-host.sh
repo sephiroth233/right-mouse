@@ -32,4 +32,6 @@ xcrun swiftc "${common[@]}" \
   -framework UniformTypeIdentifiers \
   -o "$binary"
 
+codesign --force --sign - --identifier cn.rightmouse.HostCheck "$binary"
+codesign --verify --strict "$binary"
 if [[ "${1:-}" != "--build-only" ]]; then "$binary"; fi

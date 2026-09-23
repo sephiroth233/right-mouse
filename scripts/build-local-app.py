@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import plistlib
 import secrets
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -38,6 +39,10 @@ with tempfile.TemporaryDirectory(prefix='local-signing-', dir=BUILD) as temporar
     name = 'RightMouse Local Build ' + secrets.token_hex(8)
     config = temp/'certificate.conf'
     config.write_text('[req]\ndistinguished_name=dn\nx509_extensions=ext\nprompt=no\n[dn]\nCN='+name+'\n[ext]\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=critical,codeSigning\n')
+    # codesign also consults the search list to resolve the certificate chain,
+    # even with --keychain. Restore the original list after this build.
+    original_keychains = shlex.split(subprocess.check_output(
+        ['/usr/bin/security', 'list-keychains', '-d', 'user'], text=True))
     try:
         run(['/usr/bin/openssl','req','-new','-x509','-newkey','rsa:2048','-nodes','-days','3650','-config',config,
              '-keyout',temp/'key.pem','-out',temp/'cert.pem'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -47,8 +52,13 @@ with tempfile.TemporaryDirectory(prefix='local-signing-', dir=BUILD) as temporar
              '-out',temp/'identity.p12','-passout','pass:'+password])
         run(['/usr/bin/security','create-keychain','-p',password,keychain], stdout=subprocess.DEVNULL)
         run(['/usr/bin/security','unlock-keychain','-p',password,keychain])
+        run(['/usr/bin/security','list-keychains','-d','user','-s',keychain,*original_keychains])
         run(['/usr/bin/security','import',temp/'identity.p12','-k',keychain,'-P',password,'-T','/usr/bin/codesign'], stdout=subprocess.DEVNULL)
         run(['/usr/bin/security','set-key-partition-list','-S','apple-tool:,apple:','-s','-k',password,keychain], stdout=subprocess.DEVNULL)
+        identities = subprocess.check_output(
+            ['/usr/bin/security','find-identity','-p','codesigning',keychain], text=True)
+        if fingerprint.lower() not in identities.lower():
+            raise SystemExit('Temporary keychain has no matching certificate/private-key identity; signing aborted.')
         bridge_info = {'CFBundleIdentifier':'cn.rightmouse.RightMouse.Bridge','CFBundleExecutable':'RightMouseBridge',
             'CFBundlePackageType':'APPL','CFBundleVersion':'1','LSMinimumSystemVersion':'14.0','LSBackgroundOnly':True}
         (bridge/'Contents/Info.plist').write_bytes(plistlib.dumps(bridge_info))
@@ -90,4 +100,7 @@ with tempfile.TemporaryDirectory(prefix='local-signing-', dir=BUILD) as temporar
         print('Local XPC app:', app)
         print('Build certificate:', fingerprint, '(identity only, not Apple notarization)')
     finally:
-        subprocess.run(['/usr/bin/security','delete-keychain',str(keychain)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            run(['/usr/bin/security','list-keychains','-d','user','-s',*original_keychains])
+        finally:
+            subprocess.run(['/usr/bin/security','delete-keychain',str(keychain)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

@@ -9,4 +9,8 @@ CHECKS=(); while IFS= read -r file; do CHECKS+=("$file"); done < <(find "$ROOT/t
 COMMON=(-sdk "$SDK" -target "$(uname -m)-apple-macosx14.0" -swift-version 5 -module-cache-path "$BUILD/module-cache")
 xcrun swiftc "${COMMON[@]}" -parse-as-library -enable-testing -emit-library -static -emit-module -module-name RightMouseCore -emit-module-path "$BUILD/modules/RightMouseCore.swiftmodule" "${CORE[@]}" -o "$BUILD/libRightMouseCore.a"
 xcrun swiftc "${COMMON[@]}" -I "$BUILD/modules" -L "$BUILD" -lRightMouseCore "${CHECKS[@]}" -o "$BUILD/RightMouseCheck"
+# Intel linkers do not automatically ad-hoc sign executables. Bookmark fixtures
+# need a code identity to obtain the app-scope key on both architectures.
+codesign --force --sign - --identifier cn.rightmouse.CoreCheck "$BUILD/RightMouseCheck"
+codesign --verify --strict "$BUILD/RightMouseCheck"
 if [[ "${1:-}" != "--build-only" ]]; then "$BUILD/RightMouseCheck"; fi
