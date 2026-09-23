@@ -3,6 +3,7 @@ import RightMouseCore
 
 do {
     var total = try runProtocolChecks()
+    total += try runLocalFinderRequestChecks()
     total += try await runFileEngineChecks()
     total += try runMenuChecks()
     total += try runSettingsChecks()

@@ -121,3 +121,7 @@ Finder 菜单回调
 - [工程约束](../../docs/sdd/constitution.md)
 - [数据模型](data-model.md)
 - [Apple 文件访问](https://developer.apple.com/documentation/security/accessing-files-from-the-macos-app-sandbox)
+
+## 本机验收路线补充（2026-09-23）
+
+用户明确没有开发者账号，优先本机可用。新增独立 development/ad-hoc 模式，使用内置 Finder 菜单与有界 local-action URL；URL 仅提出意图，宿主逐次确认后才进入现有账本与执行器。正式签名共享队列方案保留。扩展保留沙盒、宿主延续非沙盒拓扑，双方本机模式不申请 App Group。协议、限制与真机结果见[本机模式契约](evidence/EV-local-finder-001.md)，该路线不等同于已通过正式签名、公证或全部系统验收。
