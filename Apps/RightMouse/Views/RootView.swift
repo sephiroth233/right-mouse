@@ -17,7 +17,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .general: return "让常用文件操作，就在右键菜单里。"
-        case .menus: return "只留下常用操作，按你的习惯排列。"
+        case .menus: return "选择显示位置，整理你的右键菜单。"
         case .templates: return "用真实模板创建文件，保留格式与初始内容。"
         case .applications: return "在终端、编辑器或其他应用中继续工作。"
         case .diagnostics: return "管理 Finder 扩展、目录范围与访问权限。"
@@ -59,17 +59,21 @@ struct RootView: View {
                         }
                     }.padding(.horizontal, 10)
                 }
-                Label(model.isLocalFinderMode ? (model.extensionEnabled ? "本机菜单，扩展已启用" : "本机模式，等待启用") : model.isDevelopmentStorage ? "开发模式，Finder 不可用" : (model.extensionEnabled ? "扩展已启用" : "等待启用扩展"), systemImage: model.isDevelopmentStorage ? "exclamationmark.triangle" : (model.extensionEnabled ? "checkmark.circle.fill" : "circle.dashed"))
-                    .font(.caption).foregroundStyle(model.isDevelopmentStorage ? .orange : (model.extensionEnabled ? .green : .secondary))
+                Label(model.localServiceReady ? "已连接" : (model.extensionEnabled ? "扩展已启用" : "等待启用"), systemImage: model.localServiceReady ? "circle.fill" : "circle.dashed")
+                    .font(.caption).foregroundStyle(model.localServiceReady ? .green : .secondary)
                     .padding(.horizontal, 16).padding(.bottom, 16)
-            }.frame(width: 204).rightMouseGlass(radius: 22)
+            }.frame(width: 184).rightMouseGlass(radius: 22)
             VStack(alignment: .leading, spacing: 0) {
                 let current = page ?? .general
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(current.rawValue).font(.system(size: 27, weight: .semibold, design: .rounded))
+                    HStack {
+                        Text(current.rawValue).font(.system(size: 27, weight: .semibold, design: .rounded))
+                        Spacer()
+                        if current == .menus && model.localServiceReady { Label("已连接", systemImage: "circle.fill").font(.caption).foregroundStyle(.green) }
+                    }
                     Text(current.subtitle).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }.padding(24)
-                if model.isDevelopmentStorage {
+                }.padding(.horizontal, 24).padding(.vertical, current == .menus ? 18 : 24)
+                if model.isDevelopmentStorage && !(current == .menus && model.localServiceReady) {
                     Label(model.isLocalFinderMode ? (model.authenticatedXPCBuild ? model.localServiceStatus : "本机模式 · Finder 使用内置菜单，文件操作将在应用中确认。") : "开发模式 · Finder 菜单暂不可用，请使用本机发行版连接 Finder。", systemImage: model.localServiceReady ? "checkmark.shield" : "exclamationmark.triangle")
                         .font(.callout).fixedSize(horizontal: false, vertical: true)
                         .padding(12).background((model.localServiceReady ? Color.green : Color.orange).opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
