@@ -360,7 +360,8 @@
         "../../Config/validation/finder-load-2026-09-22.md",
         "evidence/EV-workflows-001.md",
         "evidence/EV-core-checks-001.md",
-        "evidence/EV-top-level-menu-001.md"
+        "evidence/EV-top-level-menu-001.md",
+        "evidence/EV-local-xpc-probe-001.md"
       ]
     },
     {
@@ -379,7 +380,8 @@
         "evidence/EV-private-storage-recovery-001.md",
         "evidence/EV-diagnostics-retention-001.md",
         "evidence/EV-source-isolation-001.md",
-        "evidence/EV-clipboard-protocol-001.md"
+        "evidence/EV-clipboard-protocol-001.md",
+        "evidence/EV-local-xpc-probe-001.md"
       ]
     },
     {
